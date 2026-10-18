@@ -542,6 +542,35 @@ h1 > span {
 .sequence-meta > span {
   color: #4f5f77;
 }
+.sequence-playback {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: -4px 0 20px;
+}
+.sequence-playback > .secondary-button {
+  min-width: 92px;
+}
+.sequence-phase-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #a5b8c9;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.sequence-phase-note svg {
+  flex-shrink: 0;
+}
+.board-actions.board-actions-submit {
+  justify-content: flex-end;
+}
+.pad:disabled {
+  opacity: 0.5;
+}
+.post-result-actions > span {
+  line-height: 1.8;
+}
 .sequencer-scroll {
   margin: -4px -5px;
   padding: 4px 5px;

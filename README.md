@@ -16,13 +16,15 @@ Open the Vite address printed in the terminal. Audio starts only after a click. 
 ## Play
 
 - Each UTC day has three deterministic, curated 16-step puzzles with kick, snare, and closed hi-hat.
-- Press the coral play button to hear the target, after a four-beat count-in. The 30-second listening budget is shared across replays; count-ins and your own beat do not consume it. Playback pauses when the tab is hidden or instructions are opened.
-- Toggle pads to recreate the loop. Sixteen sixteenth notes make one bar of 4/4. Use arrow keys to navigate and Space or Enter to toggle. Instrument labels preview their sound.
-- Editing and auditioning your own sequence have no time limit. Editing a sequence stops its current preview; play it again to hear changes.
-- Submit once per round to reveal the correct solution, compare with your answer, and replay either rhythm. Correct hits and correct rests count equally: `round(100 × matching cells / 48)`. Scores range from 0–100 per round, with a daily maximum of 300.
-- Daily answers, submissions, and consumed listening time are saved in this browser’s localStorage. The challenge resets at **00:00 UTC**, including while the game is open. Practice offers unlimited rounds and never changes daily progress.
+- Press the coral button to hear a four-beat count-in, followed by exactly **six complete loops**. The grid and submission stay locked until all six finish. Playback pauses when the tab is hidden or instructions are opened. Only completed loops are saved; an interrupted loop starts over when you resume.
+- Once the grid unlocks, toggle pads to recreate the loop. Sixteen sixteenth notes make one bar of 4/4. Use arrow keys to navigate and Space or Enter to toggle. Switching a pad on plays its corresponding drum sound; switching it off is silent. Instrument labels also preview their sound.
+- **Play**, directly below **Your sequence**, starts your beat immediately without a count-in. Editing and auditioning have no time limit. Editing a playing sequence stops it; press Play again to hear your changes.
+- Submit once per round to reveal the solution and replay either rhythm. The score is `round(100 - (100 / n) * m)`, where `n` is the number of required hits in the solution and `m` is the number of required hits you missed. Extra selected pads and correct rests do not affect this score. A solution with no required hits scores 100. The maximum daily score is 300.
+- Daily answers, submissions, and completed loop counts are saved in this browser’s localStorage. The challenge resets at **00:00 UTC**, including while the game is open. Practice offers unlimited rounds and never changes daily progress.
 
 Progress is local to this browser and origin; clearing site data resets it. Without a backend, local clock changes or manually edited browser storage cannot be prevented. The daily pattern catalogue is versioned in source; keep existing puzzle IDs/patterns and the selection algorithm stable to preserve existing daily scores.
+
+The six-loop rules use a new saved-progress version. Existing 30-second attempts remain untouched in storage; they do not carry over into the new rules.
 
 ## Verify
 
@@ -50,10 +52,10 @@ Set `CHROMIUM_PATH` to use a different Chromium executable.
 | `src/audio/BeatleAudioEngine.ts`  | Tone.js voices, count-in, transport scheduling, cancellation, disposal |
 | `src/lib/types.ts`                | Shared puzzle, track, and progress types                               |
 | `src/lib/puzzles.ts`              | Curated rhythms and strict validation                                  |
-| `src/lib/scoring.ts`              | Pure, validated 48-cell accuracy calculation                           |
+| `src/lib/scoring.ts`              | Pure, validated required-hit scoring                                   |
 | `src/lib/daily.ts`                | UTC keys, seeded daily selection, practice, safe persistence           |
 | `src/lib/useDailyGame.ts`         | React persistence and live UTC rollover                                |
-| `src/components/RoundBoard.tsx`   | Sequencer, listening budget, playback, result comparison               |
+| `src/components/RoundBoard.tsx`   | Locked listening phase, sequencer, playback, result comparison         |
 | `src/components/DailySummary.tsx` | Daily totals, copyable results, reset countdown                        |
 | `src/components/HelpDialog.tsx`   | Accessible instructions dialog                                         |
 | `src/App.tsx`                     | Daily/practice orchestration and round navigation                      |

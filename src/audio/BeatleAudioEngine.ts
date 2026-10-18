@@ -6,10 +6,14 @@ export interface PlaybackOptions {
   onStep?: (step: number) => void;
   /** Beats 1–4 during the count-in; null when the loop starts or stops. */
   onCountIn?: (beat: number | null) => void;
-  /** Fired when maxSeconds expires, but not when stop() is called. */
+  /** Fired after each complete 16-step loop, using a one-based loop count. */
+  onLoopComplete?: (completedLoops: number) => void;
+  /** Fired after maxLoops complete loops, but not when stop() is called. */
   onComplete?: () => void;
-  /** Listening time after the four-beat count-in. Omit for unlimited playback. */
-  maxSeconds?: number;
+  /** Whole loops after the count-in. Omit for unlimited playback. */
+  maxLoops?: number;
+  /** Include the four-beat count-in. Defaults to true. */
+  countIn?: boolean;
 }
 
 const TRACKS: TrackId[] = ["kick", "snare", "hihat"];
@@ -31,6 +35,7 @@ export class BeatleAudioEngine {
   private disposed = false;
   private running = false;
   private options?: PlaybackOptions;
+  private lastTrigger: Partial<Record<TrackId, number>> = {};
 
   async init(): Promise<void> {
     if (this.disposed) throw new Error("This audio engine has been disposed.");
@@ -107,10 +112,10 @@ export class BeatleAudioEngine {
       throw new Error("Every drum track must contain exactly 16 steps.");
     }
     if (
-      options.maxSeconds !== undefined &&
-      (!Number.isFinite(options.maxSeconds) || options.maxSeconds <= 0)
+      options.maxLoops !== undefined &&
+      (!Number.isSafeInteger(options.maxLoops) || options.maxLoops <= 0)
     ) {
-      throw new Error("Listening time must be a positive number of seconds.");
+      throw new Error("The loop count must be a positive integer.");
     }
 
     // Invalidate pending play() calls before waiting for AudioContext startup.
@@ -126,13 +131,14 @@ export class BeatleAudioEngine {
     const transport = Tone.getTransport();
     const draw = Tone.getDraw();
     const secondsPerBeat = 60 / bpm;
-    const countInSeconds = secondsPerBeat * 4;
+    const loopSeconds = secondsPerBeat * 4;
+    const countInSeconds = options.countIn === false ? 0 : loopSeconds;
     this.options = options;
     this.running = true;
     transport.bpm.value = bpm;
     transport.seconds = 0;
 
-    for (let beat = 0; beat < 4; beat += 1) {
+    for (let beat = 0; beat < (options.countIn === false ? 0 : 4); beat += 1) {
       this.events.push(
         transport.scheduleOnce((time) => {
           if (generation !== this.generation) return;
@@ -148,13 +154,20 @@ export class BeatleAudioEngine {
       );
     }
 
-    let step = 0;
+    let scheduledSteps = 0;
     let loopStarted = false;
     this.events.push(
       transport.scheduleRepeat(
         (time) => {
           if (generation !== this.generation) return;
-          const currentStep = step;
+          // Tone schedules audio ahead of the drawing callback that stops us.
+          // Guard the boundary here so a seventh loop can never sound.
+          if (
+            options.maxLoops !== undefined &&
+            scheduledSteps >= options.maxLoops * STEPS
+          )
+            return;
+          const currentStep = scheduledSteps % STEPS;
           for (const track of TRACKS) {
             if (snapshot[track][currentStep])
               this.trigger(track, time, currentStep % 4 === 0 ? 1 : 0.85);
@@ -167,24 +180,38 @@ export class BeatleAudioEngine {
             }
             options.onStep?.(currentStep);
           }, time);
-          step = (step + 1) % STEPS;
+          scheduledSteps += 1;
         },
         "16n",
         countInSeconds,
-        options.maxSeconds ?? Infinity,
+        options.maxLoops === undefined
+          ? Infinity
+          : options.maxLoops * loopSeconds,
       ),
     );
 
-    if (options.maxSeconds !== undefined) {
+    if (options.maxLoops !== undefined || options.onLoopComplete) {
+      let completedLoops = 0;
       this.events.push(
-        transport.scheduleOnce((time) => {
-          draw.schedule(() => {
+        transport.scheduleRepeat(
+          (time) => {
             if (generation !== this.generation) return;
-            ++this.generation;
-            this.stopPlayback();
-            options.onComplete?.();
-          }, time);
-        }, countInSeconds + options.maxSeconds),
+            draw.schedule(() => {
+              if (generation !== this.generation) return;
+              completedLoops += 1;
+              options.onLoopComplete?.(completedLoops);
+              // A loop callback may itself stop or replace this playback.
+              if (generation !== this.generation) return;
+              if (completedLoops === options.maxLoops) {
+                ++this.generation;
+                this.stopPlayback();
+                options.onComplete?.();
+              }
+            }, time);
+          },
+          "1m",
+          countInSeconds + loopSeconds,
+        ),
       );
     }
 
@@ -215,9 +242,15 @@ export class BeatleAudioEngine {
     this.snareBody = undefined;
     this.hihat = undefined;
     this.click = undefined;
+    this.lastTrigger = {};
   }
 
   private trigger(track: TrackId, time: number, velocity: number): void {
+    // Two rapid pad activations can share an AudioContext timestamp. Tone's
+    // noise sources require strictly increasing starts; previews can also race
+    // notes already queued by the transport's lookahead scheduler.
+    time = Math.max(time, (this.lastTrigger[track] ?? -Infinity) + 0.0001);
+    this.lastTrigger[track] = time;
     if (track === "kick")
       this.kick?.triggerAttackRelease("C1", 0.08, time, velocity);
     if (track === "snare") {

@@ -3,6 +3,7 @@ import { scorePattern } from "./scoring";
 import {
   clonePattern,
   createEmptyPattern,
+  LISTENING_LOOPS,
   TRACKS,
   type Puzzle,
   type RoundProgress,
@@ -10,7 +11,8 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const FIRST_CHALLENGE_UTC = Date.UTC(2026, 0, 1);
-const STORAGE_PREFIX = "beatle:daily:v1:";
+// New listening and scoring rules start fresh without modifying earlier records.
+const STORAGE_PREFIX = "beatle:daily:v2:";
 const MAX_RECORD_LENGTH = 16_384;
 
 export interface DailyChallenge {
@@ -94,7 +96,7 @@ export function createDailyProgress(dateKey: string): DailyProgress {
     dateKey,
     rounds: Array.from({ length: 3 }, () => ({
       pattern: createEmptyPattern(),
-      listeningSecondsUsed: 0,
+      completedLoops: 0,
       submitted: false,
     })),
   };
@@ -102,7 +104,7 @@ export function createDailyProgress(dateKey: string): DailyProgress {
 
 function isUntouched(round: RoundProgress): boolean {
   return (
-    round.listeningSecondsUsed === 0 &&
+    round.completedLoops === 0 &&
     TRACKS.every(({ id }) => round.pattern[id].every((hit) => !hit))
   );
 }
@@ -131,12 +133,21 @@ function validateProgress(
     validatePattern(round.pattern);
     if (
       typeof round.submitted !== "boolean" ||
-      typeof round.listeningSecondsUsed !== "number" ||
-      !Number.isFinite(round.listeningSecondsUsed) ||
-      round.listeningSecondsUsed < 0 ||
-      round.listeningSecondsUsed > 30
+      typeof round.completedLoops !== "number" ||
+      !Number.isInteger(round.completedLoops) ||
+      round.completedLoops < 0 ||
+      round.completedLoops > LISTENING_LOOPS
     ) {
-      throw new Error("Invalid round status or listening budget.");
+      throw new Error("Invalid round status or completed loop count.");
+    }
+    if (
+      round.completedLoops < LISTENING_LOOPS &&
+      (round.submitted ||
+        TRACKS.some(({ id }) =>
+          (round.pattern as RoundProgress["pattern"])[id].some(Boolean),
+        ))
+    ) {
+      throw new Error("Listen to all six loops before creating an answer.");
     }
     if (
       activeRoundSeen &&
@@ -155,7 +166,7 @@ function copyProgress(progress: DailyProgress): DailyProgress {
     rounds: progress.rounds.map((round) => ({
       pattern: clonePattern(round.pattern),
       submitted: round.submitted,
-      listeningSecondsUsed: round.listeningSecondsUsed,
+      completedLoops: round.completedLoops,
     })),
   };
 }

@@ -1,4 +1,5 @@
 export const STEP_COUNT = 16;
+export const LISTENING_LOOPS = 6;
 
 export type TrackId = "kick" | "snare" | "hihat";
 
@@ -26,7 +27,7 @@ export interface Puzzle {
 
 export interface RoundProgress {
   pattern: RhythmPattern;
-  listeningSecondsUsed: number;
+  completedLoops: number;
   submitted: boolean;
 }
 

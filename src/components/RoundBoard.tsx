@@ -11,6 +11,7 @@ import {
   CheckCheck,
   CircleHelp,
   Headphones,
+  LockKeyhole,
   LoaderCircle,
   Play,
   RotateCcw,
@@ -22,14 +23,13 @@ import { BeatleAudioEngine } from "../audio/BeatleAudioEngine";
 import { getScoreDetails } from "../lib/scoring";
 import {
   createEmptyPattern,
+  LISTENING_LOOPS,
   STEP_COUNT,
   TRACKS,
   type Puzzle,
   type RoundProgress,
   type TrackId,
 } from "../lib/types";
-
-export const LISTENING_SECONDS = 30;
 
 interface Props {
   puzzle: Puzzle;
@@ -66,9 +66,6 @@ export default function RoundBoard({
   const progressRef = useRef(progress);
   const onChangeRef = useRef(onChange);
   const playbackRef = useRef<Playback>(null);
-  const listeningStartedAt = useRef<number | null>(null);
-  const listeningBase = useRef(0);
-  const countingRef = useRef(false);
   const requestRef = useRef(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -86,26 +83,19 @@ export default function RoundBoard({
   progressRef.current = progress;
   onChangeRef.current = onChange;
 
-  function updateListeningTime(finish = false) {
-    const started = listeningStartedAt.current;
-    if (started === null || progressRef.current.submitted) return;
-    const listeningSecondsUsed = finish
-      ? LISTENING_SECONDS
-      : Math.min(
-          LISTENING_SECONDS,
-          listeningBase.current + (performance.now() - started) / 1000,
-        );
-    const next = { ...progressRef.current, listeningSecondsUsed };
+  function updateCompletedLoops(completedLoops: number) {
+    if (progressRef.current.submitted) return;
+    const next = {
+      ...progressRef.current,
+      completedLoops: Math.min(LISTENING_LOOPS, completedLoops),
+    };
     progressRef.current = next;
     onChangeRef.current(next);
   }
 
   function stopPlayback() {
     requestRef.current += 1;
-    updateListeningTime();
-    listeningStartedAt.current = null;
     playbackRef.current = null;
-    countingRef.current = false;
     engineRef.current?.stop();
     setPlayback(null);
     setCountIn(null);
@@ -116,7 +106,6 @@ export default function RoundBoard({
   useEffect(() => {
     const engine = new BeatleAudioEngine();
     engineRef.current = engine;
-    const tick = window.setInterval(() => updateListeningTime(), 200);
     const onVisibility = () => {
       if (document.hidden) stopPlayback();
     };
@@ -125,10 +114,7 @@ export default function RoundBoard({
     window.addEventListener("pagehide", onPageHide);
     return () => {
       requestRef.current += 1;
-      updateListeningTime();
-      listeningStartedAt.current = null;
       playbackRef.current = null;
-      window.clearInterval(tick);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
       engine.dispose();
@@ -150,23 +136,23 @@ export default function RoundBoard({
       return;
     }
     stopPlayback();
-    const remaining =
-      LISTENING_SECONDS - progressRef.current.listeningSecondsUsed;
+    const startingLoops = progressRef.current.completedLoops;
+    const remaining = LISTENING_LOOPS - startingLoops;
     if (mode === "target" && !progressRef.current.submitted && remaining <= 0)
       return;
+    if (mode === "answer" && startingLoops < LISTENING_LOOPS) return;
     const request = ++requestRef.current;
     setLoading(true);
     setAudioError("");
     playbackRef.current = mode;
     setPlayback(mode);
-    countingRef.current = true;
-    listeningBase.current = progressRef.current.listeningSecondsUsed;
     try {
       await engineRef.current?.play(
         mode === "target" ? puzzle.pattern : progressRef.current.pattern,
         puzzle.bpm,
         {
-          maxSeconds:
+          countIn: mode === "target",
+          maxLoops:
             mode === "target" && !progressRef.current.submitted
               ? remaining
               : undefined,
@@ -177,18 +163,15 @@ export default function RoundBoard({
             if (request !== requestRef.current) return;
             setCountIn(beat);
             setLoading(false);
-            if (beat === null && countingRef.current) {
-              countingRef.current = false;
-              if (mode === "target" && !progressRef.current.submitted)
-                listeningStartedAt.current = performance.now();
-            }
+          },
+          onLoopComplete: (completed) => {
+            if (request !== requestRef.current || mode !== "target") return;
+            updateCompletedLoops(startingLoops + completed);
           },
           onComplete: () => {
             if (request !== requestRef.current) return;
-            updateListeningTime(true);
-            listeningStartedAt.current = null;
+            updateCompletedLoops(LISTENING_LOOPS);
             playbackRef.current = null;
-            countingRef.current = false;
             setPlayback(null);
             setCountIn(null);
             setCurrentStep(-1);
@@ -218,14 +201,21 @@ export default function RoundBoard({
   }
 
   function toggleCell(track: TrackId, step: number) {
-    if (progressRef.current.submitted) return;
+    if (
+      progressRef.current.submitted ||
+      progressRef.current.completedLoops < LISTENING_LOOPS
+    )
+      return;
     if (playbackRef.current === "answer") stopPlayback();
     const nextPattern = {
       ...progressRef.current.pattern,
       [track]: [...progressRef.current.pattern[track]],
     };
     nextPattern[track][step] = !nextPattern[track][step];
-    onChange({ ...progressRef.current, pattern: nextPattern });
+    const next = { ...progressRef.current, pattern: nextPattern };
+    progressRef.current = next;
+    onChangeRef.current(next);
+    if (nextPattern[track][step]) void previewInstrument(track);
     setClearConfirmation(false);
   }
 
@@ -274,6 +264,11 @@ export default function RoundBoard({
   }
 
   function submit() {
+    if (
+      progressRef.current.submitted ||
+      progressRef.current.completedLoops < LISTENING_LOOPS
+    )
+      return;
     stopPlayback();
     const submitted = { ...progressRef.current, submitted: true };
     progressRef.current = submitted;
@@ -281,11 +276,8 @@ export default function RoundBoard({
     setResultView("solution");
   }
 
-  const remaining = Math.max(
-    0,
-    LISTENING_SECONDS - progress.listeningSecondsUsed,
-  );
-  const exhausted = remaining <= 0;
+  const listeningComplete = progress.completedLoops >= LISTENING_LOOPS;
+  const gridLocked = !listeningComplete;
   const details = progress.submitted
     ? getScoreDetails(progress.pattern, puzzle.pattern)
     : null;
@@ -325,7 +317,7 @@ export default function RoundBoard({
         <button
           className="listen-button"
           onClick={() => void play("target")}
-          disabled={!progress.submitted && exhausted}
+          disabled={!progress.submitted && listeningComplete}
           aria-label={
             playback === "target"
               ? "Stop listening"
@@ -350,16 +342,18 @@ export default function RoundBoard({
                 ? "Find the groove."
                 : progress.submitted
                   ? "The original beat"
-                  : exhausted
+                  : listeningComplete
                     ? "Now, trust your ears."
                     : "First, catch the beat."}
           </h3>
           <p>
             {progress.submitted
               ? "Listen again and compare your rhythm."
-              : exhausted
-                ? "Your listening time is up. Take your time on the grid."
-                : "Listen closely. You have 30 seconds to make it stick."}
+              : listeningComplete
+                ? "Six loops heard. The grid is yours—take your time."
+                : playback === "target" && countIn === null && !loading
+                  ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. Just listen for now.`
+                  : "Hear the loop six times, then recreate it from memory."}
           </p>
         </div>
         <div
@@ -391,11 +385,10 @@ export default function RoundBoard({
           ) : (
             <>
               <span className="clock-time">
-                <span>{String(Math.ceil(remaining)).padStart(2, "0")}</span>
-                <span className="clock-unit">s</span>
-                <span className="clock-total"> / 30s</span>
+                <span>{progress.completedLoops}</span>
+                <span className="clock-total"> / {LISTENING_LOOPS}</span>
               </span>
-              <span className="clock-label">LISTENING TIME LEFT</span>
+              <span className="clock-label">LOOPS COMPLETED</span>
             </>
           )}
         </div>
@@ -403,13 +396,16 @@ export default function RoundBoard({
           <div
             className="listening-progress"
             role="progressbar"
-            aria-label="Listening time remaining"
+            aria-label="Loops completed"
             aria-valuemin={0}
-            aria-valuemax={30}
-            aria-valuenow={Math.ceil(remaining)}
+            aria-valuemax={LISTENING_LOOPS}
+            aria-valuenow={progress.completedLoops}
+            aria-valuetext={`${progress.completedLoops} of ${LISTENING_LOOPS} loops completed`}
           >
             <span
-              style={{ width: `${(remaining / LISTENING_SECONDS) * 100}%` }}
+              style={{
+                width: `${(progress.completedLoops / LISTENING_LOOPS) * 100}%`,
+              }}
             />
           </div>
         )}
@@ -450,6 +446,36 @@ export default function RoundBoard({
         )}
       </div>
 
+      <div className="sequence-playback">
+        <button
+          className={`secondary-button ${playback === "answer" ? "button-playing" : ""}`}
+          disabled={gridLocked || !hasNotes}
+          onClick={() => void play("answer")}
+        >
+          {playback === "answer" ? (
+            <Square size={14} fill="currentColor" />
+          ) : (
+            <Play size={15} fill="currentColor" />
+          )}
+          {playback === "answer" ? "Stop" : "Play"}
+        </button>
+        {!progress.submitted && (
+          <p className="sequence-phase-note" role="status">
+            {gridLocked ? (
+              <>
+                <LockKeyhole size={13} />
+                Listen to all six loops to unlock the grid.
+              </>
+            ) : (
+              <>
+                <CheckCheck size={14} />
+                Your turn. The grid is unlocked.
+              </>
+            )}
+          </p>
+        )}
+      </div>
+
       <div
         className="sequencer-scroll"
         tabIndex={0}
@@ -485,6 +511,7 @@ export default function RoundBoard({
             >
               <button
                 className="instrument-button"
+                disabled={gridLocked}
                 onClick={() => void previewInstrument(track.id)}
                 aria-label={`Preview ${track.label} sound`}
                 title={`Hear the ${track.label.toLowerCase()}`}
@@ -511,7 +538,8 @@ export default function RoundBoard({
                     className={`pad ${active ? "pad-active" : ""} ${step % 4 === 0 ? "bar-start" : ""} ${Math.floor(step / 4) % 2 ? "alternate-beat" : ""} ${currentStep === step ? "pad-playing" : ""} ${wrong ? "pad-mismatch" : ""}`}
                     aria-label={`${track.label}, step ${step + 1}${progress.submitted ? `${wrong ? ", incorrect" : ", correct"}${active ? ", hit" : ", rest"}` : ""}`}
                     aria-pressed={active}
-                    aria-disabled={progress.submitted}
+                    disabled={gridLocked}
+                    aria-disabled={gridLocked || progress.submitted}
                     tabIndex={focusedCell === cellIndex ? 0 : -1}
                     onFocus={() => setFocusedCell(cellIndex)}
                     onClick={() => toggleCell(track.id, step)}
@@ -550,15 +578,21 @@ export default function RoundBoard({
             </>
           ) : (
             <>
-              <span className="hint-square" />
-              Click a pad to add a hit. Click again to remove it.
+              {gridLocked ? (
+                <LockKeyhole size={12} />
+              ) : (
+                <span className="hint-square" />
+              )}
+              {gridLocked
+                ? "Listen first. Your grid will unlock automatically."
+                : "Add a hit to hear it. Click again to remove it."}
             </>
           )}
         </p>
         {!progress.submitted && (
           <button
             className="text-button"
-            disabled={!hasNotes}
+            disabled={gridLocked || !hasNotes}
             onClick={() => {
               if (clearConfirmation) {
                 stopPlayback();
@@ -609,7 +643,8 @@ export default function RoundBoard({
               <h3>
                 <strong>{details.accuracy}%</strong> accuracy{" "}
                 <span>
-                  · {details.correctCells} of {details.totalCells} pads matched
+                  · {details.matchedHits} of {details.requiredHits} required
+                  hits found
                 </span>
               </h3>
             </div>
@@ -628,26 +663,18 @@ export default function RoundBoard({
           )}
         </div>
       ) : (
-        <div className="board-actions">
-          <button
-            className={`secondary-button ${playback === "answer" ? "button-playing" : ""}`}
-            disabled={!hasNotes}
-            onClick={() => void play("answer")}
-          >
-            {playback === "answer" ? (
-              <Square size={14} fill="currentColor" />
-            ) : (
-              <Play size={15} fill="currentColor" />
-            )}{" "}
-            {playback === "answer" && countIn !== null
-              ? `Count-in · ${countIn}`
-              : playback === "answer"
-                ? "Stop my beat"
-                : "Play my beat"}
-          </button>
+        <div className="board-actions board-actions-submit">
           <div className="submit-area">
-            <span>No rush. Make it yours.</span>
-            <button className="primary-button" onClick={submit}>
+            <span>
+              {gridLocked
+                ? "First listen. Then make it yours."
+                : "No rush. Make it yours."}
+            </span>
+            <button
+              className="primary-button"
+              onClick={submit}
+              disabled={gridLocked}
+            >
               Submit beat
               <ArrowRight size={17} />
             </button>
@@ -656,11 +683,10 @@ export default function RoundBoard({
       )}
       {progress.submitted && (
         <div className="post-result-actions">
-          <button className="text-button" onClick={() => void play("answer")}>
-            {playback === "answer" ? <Square size={13} /> : <Play size={13} />}{" "}
-            {playback === "answer" ? "Stop my beat" : "Listen to my beat"}
-          </button>
-          <span>Hits and rests count equally toward your score.</span>
+          <span>
+            Score = 100 − (100 ÷ required hits) × missed hits. Extra hits don’t
+            reduce your score.
+          </span>
         </div>
       )}
 

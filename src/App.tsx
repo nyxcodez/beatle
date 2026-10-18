@@ -25,7 +25,7 @@ import { useDailyGame } from "./lib/useDailyGame";
 type Mode = "daily" | "practice";
 const freshRound = (): RoundProgress => ({
   pattern: createEmptyPattern(),
-  listeningSecondsUsed: 0,
+  completedLoops: 0,
   submitted: false,
 });
 
@@ -298,7 +298,7 @@ export default function App() {
             </span>
             <p>
               <strong>Listen in.</strong>
-              <span>30 seconds to catch the groove.</span>
+              <span>Six loops to catch the groove.</span>
             </p>
           </div>
           <div>

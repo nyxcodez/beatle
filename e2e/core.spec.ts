@@ -1,45 +1,112 @@
-import { expect, test } from '@playwright/test';
-import { getDailyChallenge } from '../src/lib/daily';
-import { TRACKS } from '../src/lib/types';
+import { expect, test } from "@playwright/test";
+import { getDailyChallenge } from "../src/lib/daily";
+import { audioProbe, fillPuzzle, installAudioProbe } from "./helpers";
 
-test('a complete core round: listen, edit, preview, submit, and reveal the solution', async ({ page }) => {
+test("a complete round: hear exactly six full loops, unlock the grid, play immediately, submit, and reveal", async ({
+  page,
+}) => {
   const errors: string[] = [];
-  page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
-  const dateKey = await page.evaluate(() => new Date().toISOString().slice(0, 10));
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await installAudioProbe(page);
+  const dateKey = await page.evaluate(() =>
+    new Date().toISOString().slice(0, 10),
+  );
   const puzzle = getDailyChallenge(dateKey).puzzles[0];
-  await expect(page.getByRole('heading', { name: 'Find your rhythm.' })).toBeVisible();
-  await expect(page.locator('.pad')).toHaveCount(48);
-  await expect(page.locator('.pad-active')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Play my beat', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Listen to the beat', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /Get ready/ })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Find the groove.' })).toBeVisible({ timeout: 6000 });
-  await expect.poll(async () => Number(await page.getByRole('progressbar').getAttribute('aria-valuenow'))).toBeLessThan(30);
-  await page.getByRole('button', { name: 'Stop listening', exact: true }).click();
-  const timeLeft = await page.getByRole('progressbar').getAttribute('aria-valuenow');
-  await page.waitForTimeout(400);
-  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', timeLeft!);
+  const loops = page.getByRole("progressbar", { name: "Loops completed" });
+  const submit = page.getByRole("button", { name: "Submit beat", exact: true });
+  const firstPad = page.getByRole("button", {
+    name: "Kick, step 1",
+    exact: true,
+  });
+  await expect(
+    page.getByRole("heading", { name: "Find your rhythm." }),
+  ).toBeVisible();
+  await expect(page.locator(".pad")).toHaveCount(48);
+  await expect(page.locator(".pad:disabled")).toHaveCount(48);
+  await expect(page.locator(".pad-active")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Play", exact: true }),
+  ).toBeDisabled();
+  await expect(submit).toBeDisabled();
+  await expect(loops).toHaveAttribute("aria-valuemax", "6");
+  await expect(loops).toHaveAttribute("aria-valuenow", "0");
+  await firstPad.dispatchEvent("click");
+  await expect(firstPad).toHaveAttribute("aria-pressed", "false");
 
-  const firstPad = page.getByRole('button', { name: 'Kick, step 1', exact: true });
+  await page
+    .getByRole("button", { name: "Listen to the beat", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: /Get ready/ })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Find the groove." }),
+  ).toBeVisible({ timeout: 6_000 });
+  await expect(loops).toHaveAttribute("aria-valuenow", "0");
+  await expect(loops).toHaveAttribute("aria-valuenow", "5", {
+    timeout: 18_000,
+  });
+  // Finishing five loops must not unlock the final loop early.
+  await expect(firstPad).toBeDisabled();
+  await expect(submit).toBeDisabled();
+  await expect(loops).toHaveAttribute("aria-valuenow", "6", { timeout: 5_000 });
+  await expect(
+    page.getByRole("heading", { name: "Now, trust your ears." }),
+  ).toBeVisible();
+  await expect(page.locator(".pad-playing")).toHaveCount(0);
+  await expect(page.locator(".pad:disabled")).toHaveCount(0);
+  await expect(submit).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Listen to the beat", exact: true }),
+  ).toBeDisabled();
+  await page.waitForTimeout(250);
+  const target = (await audioProbe(page)).plays[0];
+  expect(target.loopCallbacks).toEqual([1, 2, 3, 4, 5, 6]);
+  expect(target.firstSteps).toBe(6);
+  expect(target.complete).toBe(true);
+
   await firstPad.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('button', { name: 'Kick, step 2', exact: true })).toBeFocused();
-  await page.keyboard.press('Space');
-  await expect(page.getByRole('button', { name: 'Kick, step 2', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.keyboard.press('Space');
-  for (const track of TRACKS) {
-    for (let step = 0; step < 16; step++) {
-      if (puzzle.pattern[track.id][step]) await page.getByRole('button', { name: `${track.label}, step ${step + 1}`, exact: true }).click();
-    }
-  }
-  await page.getByRole('button', { name: 'Play my beat', exact: true }).click();
-  await expect(page.getByRole('button', { name: /Count-in/ })).toBeVisible();
-  await page.getByRole('button', { name: /Count-in/ }).click();
-  await page.getByRole('button', { name: 'Submit beat', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('100%');
-  await expect(page.getByRole('button', { name: 'The solution', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.pad-mismatch')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Play the solution', exact: true })).toBeEnabled();
+  await page.keyboard.press("ArrowRight");
+  const secondPad = page.getByRole("button", {
+    name: "Kick, step 2",
+    exact: true,
+  });
+  await expect(secondPad).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(secondPad).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Space");
+  expect((await audioProbe(page)).previews).toEqual(["kick"]);
+  await fillPuzzle(page, puzzle);
+  const play = page.getByRole("button", { name: "Play", exact: true });
+  const placement = await play.evaluate((element) => {
+    const heading = document
+      .querySelector(".sequence-heading")!
+      .getBoundingClientRect();
+    const button = element.getBoundingClientRect();
+    const grid = document
+      .querySelector(".sequencer-scroll")!
+      .getBoundingClientRect();
+    return {
+      below: button.top >= heading.bottom,
+      aboveGrid: button.bottom <= grid.top,
+    };
+  });
+  expect(placement).toEqual({ below: true, aboveGrid: true });
+  await play.click();
+  await expect(
+    page.getByRole("button", { name: "Stop", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".pad-playing")).toHaveCount(3, { timeout: 1_000 });
+  await expect(page.getByRole("button", { name: /Count-in/ })).toHaveCount(0);
+  expect((await audioProbe(page)).plays[1].countIn).toBe(false);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await submit.click();
+  await expect(page.locator(".round-result")).toContainText("100%");
+  await expect(
+    page.getByRole("button", { name: "The solution", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".pad-mismatch")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Play the solution", exact: true }),
+  ).toBeEnabled();
   expect(errors).toEqual([]);
 });

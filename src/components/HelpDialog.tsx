@@ -61,9 +61,10 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
             <div>
               <h3>Catch the beat.</h3>
               <p>
-                Press play for a four-beat count-in. You get 30 seconds of
-                listening per round, shared across replays. Pause whenever you
-                like. The count-in is free.
+                Press the coral button for a four-beat count-in, then hear the
+                loop six times. The grid stays locked until all six loops
+                finish. If you pause, completed loops are saved; an interrupted
+                loop starts over when you resume.
               </p>
             </div>
           </li>
@@ -82,8 +83,10 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
               </p>
               <p>
                 Use arrow keys to move around the grid, and Space or Enter to
-                toggle a pad. Play your own beat as often as you like. There’s
-                no time limit to edit.
+                toggle a pad. Switching a pad on plays its sound; switching it
+                off is silent. The Play button below “Your sequence” starts your
+                beat immediately, with no count-in. There’s no time limit to
+                edit or play your own beat.
               </p>
             </div>
           </li>
@@ -94,10 +97,10 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
             <div>
               <h3>Trust your ears.</h3>
               <p>
-                Submit when you’re ready. Each of the 48 pads counts equally:
-                correct hits <em>and</em> correct rests. Your percentage is
-                rounded to a whole number. Three rounds add up to a maximum of
-                300 points.
+                Submit when you’re ready. Your score is 100 − (100 ÷ n) × m: n
+                is the number of required hits, and m is the number you missed.
+                Extra hits don’t reduce your score. The percentage is rounded to
+                a whole number. Three rounds add up to a maximum of 300 points.
               </p>
             </div>
           </li>
