@@ -61,11 +61,11 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
             <div>
               <h3>Catch the beat.</h3>
               <p>
-                Press the coral button for a three-tick “3, 2, 1” count-in. Hear
-                up to six loops, or pause after one complete loop to start
-                creating your beat. The grid stays locked while the reference is
-                playing. Completed loops are saved; an interrupted loop starts
-                over when you listen again.
+                Press the cyan listening button for a three-tick “3, 2, 1”
+                count-in and up to six loops. You have one listening session:
+                pausing ends it permanently, even if all six loops haven’t
+                finished. The grid unlocks when listening ends. Refreshing,
+                switching modes, or submitting won’t restore the original beat.
               </p>
             </div>
           </li>
@@ -99,12 +99,11 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
             <div>
               <h3>Trust your ears.</h3>
               <p>
-                Submit when you’re ready. Your score is 100 − (100 ÷ n) ×
-                (missed + extra hits), where n is the number of required hits.
-                Missing a required hit and adding an extra hit carry the same
-                penalty. The percentage is rounded to a whole number and never
-                falls below zero. Three rounds add up to a maximum of 300
-                points.
+                Submit when you’re ready. Your score is correct hits ÷ (required
+                hits + extra hits) × 100, rounded to a whole number. An exact
+                match earns 100; an empty grid earns 0. Missing hits reduce the
+                number correct, and extra hits reduce the percentage. Three
+                rounds add up to a maximum of 300 points.
               </p>
             </div>
           </li>

@@ -10,7 +10,7 @@ export interface ScoreDetails {
   accuracy: number;
 }
 
-/** Missing and extra hits each cost 100 / requiredHits, with a minimum score of zero. */
+/** Compare selected hits with required hits; correct rests never add points. */
 export function getScoreDetails(
   answer: RhythmPattern,
   solution: RhythmPattern,
@@ -31,19 +31,19 @@ export function getScoreDetails(
     }
   }
   const mistakeCount = missedHits + extraHits;
+  const matchedHits = requiredHits - missedHits;
+  const totalDistinctHits = requiredHits + extraHits;
   return {
     requiredHits,
     missedHits,
     extraHits,
     mistakeCount,
-    matchedHits: requiredHits - missedHits,
-    // Silence matches only silence when there are no required hits.
+    matchedHits,
+    // An empty answer always scores zero, including against an empty solution.
     accuracy:
-      requiredHits === 0
-        ? extraHits === 0
-          ? 100
-          : 0
-        : Math.max(0, Math.round(100 - (100 / requiredHits) * mistakeCount)),
+      totalDistinctHits === 0
+        ? 0
+        : Math.round((100 * matchedHits) / totalDistinctHits),
   };
 }
 

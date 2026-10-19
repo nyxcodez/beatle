@@ -1,12 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { getDailyChallenge, getUTCDateKey } from "../src/lib/daily";
 import { LISTENING_LOOPS, TRACKS } from "../src/lib/types";
-import {
-  audioProbe,
-  installAudioProbe,
-  seedDailyRound,
-  startTargetLoop,
-} from "./helpers";
+import { audioProbe, installAudioProbe, seedDailyRound } from "./helpers";
 
 async function completedLoops(page: Page, key: string): Promise<number> {
   return page.evaluate(
@@ -16,7 +11,7 @@ async function completedLoops(page: Page, key: string): Promise<number> {
   );
 }
 
-test("Space pauses the reference; one full bar unlocks editing and submission and survives reload", async ({
+test("stopping an early partial reference permanently disables it, unlocks editing, and survives reload and submission", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -24,58 +19,60 @@ test("Space pauses the reference; one full bar unlocks editing and submission an
   const storageKey = await seedDailyRound(page, getUTCDateKey(), 0);
   await page.goto("/");
   await installAudioProbe(page);
-  const loops = page.getByRole("progressbar", { name: "Loops completed" });
+  const reference = page.locator(".listen-button");
   const submit = page.getByRole("button", { name: "Submit beat", exact: true });
   await expect(page.locator(".pad:disabled")).toHaveCount(48);
   await page.keyboard.press("Space");
   await expect(
     page.getByRole("heading", { name: "Get ready… 3" }),
   ).toBeVisible();
-  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("heading", { name: "Find the groove.", exact: true }),
+  ).toBeVisible({ timeout: 6_000 });
+  await page.waitForTimeout(200);
   expect(await completedLoops(page, storageKey)).toBe(0);
-  expect((await audioProbe(page)).plays[0].loopCallbacks).toEqual([]);
-  await expect(page.locator(".pad:disabled")).toHaveCount(48);
-  await expect(submit).toBeDisabled();
-
-  await startTargetLoop(page);
-  await page.waitForTimeout(250);
-  expect(await completedLoops(page, storageKey)).toBe(0);
-  await expect(loops).toHaveAttribute("aria-valuenow", "1", { timeout: 5_000 });
-  await expect(page.locator(".pad:disabled")).toHaveCount(48);
-  await expect(submit).toBeDisabled();
   await page.keyboard.press("Space");
+  await expect(reference).toBeDisabled();
   await expect(page.locator(".pad-playing")).toHaveCount(0);
   await expect(page.locator(".pad:disabled")).toHaveCount(0);
   await expect(submit).toBeEnabled();
-  const heard = (await audioProbe(page)).plays[1];
-  expect(heard.maxLoops).toBe(6);
-  expect(heard.loopCallbacks).toEqual([1]);
-  expect(heard.countIns.filter((beat) => beat !== null)).toEqual([3, 2, 1]);
-  await page.waitForTimeout(250);
-  expect(await completedLoops(page, storageKey)).toBe(1);
-  await page.getByRole("button", { name: "Kick, step 1", exact: true }).click();
+  expect((await audioProbe(page)).plays[0].loopCallbacks).toEqual([]);
+  expect(
+    (await audioProbe(page)).plays[0].countIns.filter((beat) => beat !== null),
+  ).toEqual([3, 2, 1]);
+  expect(
+    await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key)!).rounds[0].referenceEnded,
+      storageKey,
+    ),
+  ).toBe(true);
+  // With an empty answer, Space must not restart the ended reference.
+  await page.keyboard.press("Space");
+  await reference.dispatchEvent("click");
+  expect((await audioProbe(page)).plays).toHaveLength(1);
   await page.reload();
   await installAudioProbe(page);
-  await expect(loops).toHaveAttribute("aria-valuenow", "1");
-  await expect(
-    page.getByRole("button", { name: "Kick, step 1", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(reference).toBeDisabled();
   await expect(submit).toBeEnabled();
-
-  await page
-    .getByRole("button", { name: "Listen to the beat", exact: true })
-    .click();
   await expect(
-    page.getByRole("heading", { name: "Get ready… 3" }),
-  ).toBeVisible();
-  await expect(page.locator(".pad:disabled")).toHaveCount(48);
-  expect((await audioProbe(page)).plays[0].maxLoops).toBe(5);
+    page.getByRole("progressbar", { name: "Loops completed" }),
+  ).toHaveAttribute("aria-valuenow", "0");
   await page.keyboard.press("Space");
-  await expect(submit).toBeEnabled();
-  expect(await completedLoops(page, storageKey)).toBe(1);
+  expect((await audioProbe(page)).plays).toHaveLength(0);
+  const kick = page.getByRole("button", { name: "Kick, step 1", exact: true });
+  await kick.click();
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("button", { name: "Pause", exact: true }),
+  ).toBeVisible();
+  expect((await audioProbe(page)).plays[0].countIn).toBe(false);
+  await page.keyboard.press("Space");
   await submit.click();
   await expect(page.locator(".round-result")).toBeVisible();
-  expect(await completedLoops(page, storageKey)).toBe(1);
+  await expect(reference).toBeDisabled();
+  await reference.dispatchEvent("click");
+  expect((await audioProbe(page)).plays).toHaveLength(1);
+  expect(await completedLoops(page, storageKey)).toBe(0);
   expect(errors).toEqual([]);
 });
 
@@ -182,28 +179,79 @@ test("added pads sound and live editing and clearing keep Play running without r
     .click();
   await page.getByRole("button", { name: "Submit beat", exact: true }).click();
   await expect(page.locator(".round-result")).toContainText(
-    `${Math.round(100 - 200 / required.length)}%`,
+    `${Math.round((100 * (required.length - 1)) / (required.length + 1))}%`,
   );
   await expect(page.locator(".pad-mismatch")).toHaveCount(2);
-  await page
-    .getByRole("button", { name: "Play the solution", exact: true })
-    .click();
+  await expect(page.locator(".listen-button")).toBeDisabled();
+  await page.locator(".listen-button").dispatchEvent("click");
+  expect((await audioProbe(page)).plays).toHaveLength(1);
+  // Players can still replay their submitted answer without replaying the reference.
+  await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Get ready… 3" }),
+    page.getByRole("button", { name: "Pause", exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Find the groove.", exact: true }),
-  ).toBeVisible({ timeout: 6_000 });
-  await page.waitForTimeout(1_300);
-  await expect(
-    page.getByRole("button", { name: "Stop listening", exact: true }),
-  ).toBeEnabled();
-  await expect(page.locator(".pad-playing")).toHaveCount(3);
-  await expect(page.getByRole("progressbar")).toHaveCount(0);
-  expect((await audioProbe(page)).plays[1].maxLoops).toBeUndefined();
+  await expect(page.locator(".pad-playing")).toHaveCount(3, { timeout: 1_000 });
+  expect((await audioProbe(page)).plays[1].countIn).toBe(false);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
   expect(await completedLoops(page, storageKey)).toBe(6);
-  await page
-    .getByRole("button", { name: "Stop listening", exact: true })
-    .click();
   expect(errors).toEqual([]);
+});
+
+test("help, hidden tabs, and mode switches permanently end a started reference", async ({
+  page,
+}) => {
+  const storageKey = await seedDailyRound(page, getUTCDateKey(), 0);
+  await page.goto("/");
+  for (const reason of ["help", "hidden", "mode"] as const) {
+    await test.step(reason, async () => {
+      await page.evaluate(() => localStorage.clear());
+      await page.reload();
+      await installAudioProbe(page);
+      await page
+        .getByRole("button", { name: "Listen to the beat", exact: true })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "Get ready… 3" }),
+      ).toBeVisible();
+      if (reason === "help") {
+        await page.locator(".header-help").click();
+        await expect(page.getByRole("dialog")).toBeVisible();
+        await page.keyboard.press("Escape");
+      } else if (reason === "hidden") {
+        await page.evaluate(() => {
+          Object.defineProperty(document, "hidden", {
+            configurable: true,
+            value: true,
+          });
+          document.dispatchEvent(new Event("visibilitychange"));
+          Reflect.deleteProperty(document, "hidden");
+        });
+      } else {
+        await page
+          .getByRole("button", { name: "Practice", exact: true })
+          .click();
+        await page
+          .getByRole("button", { name: "Daily beat", exact: true })
+          .click();
+      }
+      await expect(page.locator(".listen-button")).toBeDisabled();
+      await expect(page.locator(".pad-playing")).toHaveCount(0);
+      await expect(page.locator(".pad:disabled")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Submit beat", exact: true }),
+      ).toBeEnabled();
+      expect(
+        await page.evaluate(
+          (key) =>
+            JSON.parse(localStorage.getItem(key)!).rounds[0].referenceEnded,
+          storageKey,
+        ),
+      ).toBe(true);
+      await page.reload();
+      await expect(page.locator(".listen-button")).toBeDisabled();
+      await expect(
+        page.getByRole("button", { name: "Submit beat", exact: true }),
+      ).toBeEnabled();
+    });
+  }
 });

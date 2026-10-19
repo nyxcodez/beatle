@@ -102,7 +102,7 @@ button svg {
   display: block;
   width: 4px;
   height: 14px;
-  background: var(--coral);
+  background: var(--cyan);
   border-radius: 4px;
 }
 .brand-mark i:nth-child(2) {
@@ -194,7 +194,7 @@ button svg {
 .hero-eyebrow > span {
   width: 5px;
   height: 5px;
-  background: var(--coral);
+  background: var(--cyan);
   border-radius: 50%;
 }
 h1 {
@@ -393,13 +393,13 @@ h1 > span {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: var(--coral);
+  background: var(--cyan);
   color: #202535;
-  box-shadow: 0 0 0 7px #ff8c7d08;
+  box-shadow: 0 0 0 7px #62dce808;
 }
 .listen-button:hover {
-  background: #ffa396;
-  box-shadow: 0 0 0 7px #ff8c7d10;
+  background: #91e7f0;
+  box-shadow: 0 0 0 7px #62dce810;
 }
 .listen-button > svg:not(.spin) {
   margin-left: 2px;
@@ -638,7 +638,7 @@ h1 > span {
   color: #a8b2c0;
 }
 .step-label.current {
-  color: var(--coral);
+  color: var(--cyan);
 }
 .instrument-button {
   display: flex;
@@ -993,9 +993,9 @@ h1 > span {
   display: none;
 }
 .audio-error {
-  background: #ff8c7d12;
-  color: #ffb7aa;
-  border: 1px solid #ff8c7d40;
+  background: #62dce812;
+  color: #b1edf3;
+  border: 1px solid #62dce840;
   border-radius: 7px;
   font-size: 12px;
   padding: 12px;
@@ -1194,7 +1194,7 @@ h1 > span {
   top: -80px;
   left: 24px;
   z-index: 20;
-  background: #ff8c7d;
+  background: var(--cyan);
   color: #101a2a;
   border-radius: 6px;
   padding: 12px 18px;
@@ -1347,7 +1347,7 @@ h1 > span {
   color: #fff;
 }
 .dialog-content > .eyebrow {
-  color: #bca599;
+  color: #94c7d0;
   font-size: 8px;
   letter-spacing: 1.5px;
 }
@@ -1360,7 +1360,7 @@ h1 > span {
   margin: 16px 0 12px;
 }
 .dialog-content h2 span {
-  color: var(--coral);
+  color: var(--cyan);
 }
 .dialog-intro {
   color: #a5b2c5;
@@ -1485,7 +1485,7 @@ h1 > span {
 }
 .summary-total strong {
   font-family: "Manrope Variable", sans-serif;
-  color: var(--coral);
+  color: var(--cyan);
   font-size: 76px;
   font-weight: 650;
   letter-spacing: -4px;
@@ -1577,7 +1577,7 @@ h1 > span {
   height: 110px;
   font: inherit;
   resize: vertical;
-  color: #f5e4dc;
+  color: #b7edf3;
   background: #1d2a40;
   border: 1px solid #3d4b61;
   border-radius: 5px;

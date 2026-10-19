@@ -11,12 +11,7 @@ import {
   saveDailyProgress,
 } from "./daily";
 import { PUZZLES } from "./puzzles";
-import {
-  clonePattern,
-  LISTENING_LOOPS,
-  MIN_LISTENING_LOOPS,
-  TRACKS,
-} from "./types";
+import { clonePattern, LISTENING_LOOPS, TRACKS } from "./types";
 
 const DATE_KEY = "2026-10-18";
 
@@ -88,6 +83,9 @@ describe("daily progress persistence", () => {
     expect(
       progress.rounds.every(({ completedLoops }) => completedLoops === 0),
     ).toBe(true);
+    expect(progress.rounds.every(({ referenceEnded }) => !referenceEnded)).toBe(
+      true,
+    );
     expect(getActiveRound(progress)).toBe(0);
     progress.rounds[0].pattern.kick[0] = true;
     expect(progress.rounds[1].pattern.kick[0]).toBe(false);
@@ -98,8 +96,10 @@ describe("daily progress persistence", () => {
     const progress = createDailyProgress(DATE_KEY);
     progress.rounds[0].submitted = true;
     progress.rounds[0].completedLoops = LISTENING_LOOPS;
+    progress.rounds[0].referenceEnded = true;
     progress.rounds[1].pattern.snare[4] = true;
     progress.rounds[1].completedLoops = LISTENING_LOOPS;
+    progress.rounds[1].referenceEnded = true;
     expect(saveDailyProgress(progress, storage)).toBe(true);
     expect(loadDailyProgress(DATE_KEY, storage)).toEqual({
       progress,
@@ -110,20 +110,24 @@ describe("daily progress persistence", () => {
     );
   });
 
-  it("allows saving edits and submissions after just one complete loop", () => {
-    const storage = memoryStorage();
-    const progress = createDailyProgress(DATE_KEY);
-    progress.rounds[0].completedLoops = MIN_LISTENING_LOOPS;
-    progress.rounds[0].pattern.kick[0] = true;
-    expect(saveDailyProgress(progress, storage)).toBe(true);
-    expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(progress);
-    progress.rounds[0].submitted = true;
-    expect(saveDailyProgress(progress, storage)).toBe(true);
-    expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(progress);
-    expect(getActiveRound(loadDailyProgress(DATE_KEY, storage).progress)).toBe(
-      1,
-    );
-  });
+  it.each([0, 1, 3, LISTENING_LOOPS])(
+    "allows saving edits and submissions after ending reference playback at %s complete loops",
+    (completedLoops) => {
+      const storage = memoryStorage();
+      const progress = createDailyProgress(DATE_KEY);
+      progress.rounds[0].completedLoops = completedLoops;
+      progress.rounds[0].referenceEnded = true;
+      progress.rounds[0].pattern.kick[0] = true;
+      expect(saveDailyProgress(progress, storage)).toBe(true);
+      expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(progress);
+      progress.rounds[0].submitted = true;
+      expect(saveDailyProgress(progress, storage)).toBe(true);
+      expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(progress);
+      expect(
+        getActiveRound(loadDailyProgress(DATE_KEY, storage).progress),
+      ).toBe(1);
+    },
+  );
 
   it("restores partially completed listening in the existing v2 storage record", () => {
     const storage = memoryStorage();
@@ -131,6 +135,32 @@ describe("daily progress persistence", () => {
     progress.rounds[0].completedLoops = 3;
     expect(saveDailyProgress(progress, storage)).toBe(true);
     expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(progress);
+  });
+
+  it("migrates older v2 attempts without losing answers and closes played reference loops", () => {
+    const expected = createDailyProgress(DATE_KEY);
+    expected.rounds[0].completedLoops = LISTENING_LOOPS;
+    expected.rounds[0].referenceEnded = true;
+    expected.rounds[0].submitted = true;
+    expected.rounds[0].pattern.kick[0] = true;
+    expected.rounds[1].completedLoops = 2;
+    expected.rounds[1].referenceEnded = true;
+    expected.rounds[1].pattern.snare[4] = true;
+    const legacy = {
+      ...expected,
+      rounds: expected.rounds.map((round) => ({
+        pattern: round.pattern,
+        completedLoops: round.completedLoops,
+        submitted: round.submitted,
+      })),
+    };
+    const storage = memoryStorage();
+    storage.setItem(getDailyStorageKey(DATE_KEY), JSON.stringify(legacy));
+    const loaded = loadDailyProgress(DATE_KEY, storage).progress;
+    expect(loaded).toEqual(expected);
+    expect(getActiveRound(loaded)).toBe(1);
+    expect(saveDailyProgress(loaded, storage)).toBe(true);
+    expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(expected);
   });
 
   it("keeps old timer-based attempts separate from the six-loop rules", () => {
@@ -153,6 +183,7 @@ describe("daily progress persistence", () => {
     const yesterday = createDailyProgress("2026-10-17");
     yesterday.rounds[0].submitted = true;
     yesterday.rounds[0].completedLoops = LISTENING_LOOPS;
+    yesterday.rounds[0].referenceEnded = true;
     expect(saveDailyProgress(yesterday, storage)).toBe(true);
     expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(
       createDailyProgress(DATE_KEY),
@@ -206,11 +237,23 @@ describe("daily progress persistence", () => {
       },
       (progress: ReturnType<typeof createDailyProgress>) => {
         progress.rounds[0].pattern.kick[0] = true;
-        progress.rounds[0].completedLoops = MIN_LISTENING_LOOPS - 1;
       },
       (progress: ReturnType<typeof createDailyProgress>) => {
         progress.rounds[0].submitted = true;
-        progress.rounds[0].completedLoops = MIN_LISTENING_LOOPS - 1;
+      },
+      (progress: ReturnType<typeof createDailyProgress>) => {
+        progress.rounds[0].pattern.kick[0] = true;
+        progress.rounds[0].completedLoops = 1;
+      },
+      (progress: ReturnType<typeof createDailyProgress>) => {
+        progress.rounds[0].submitted = true;
+        progress.rounds[0].completedLoops = 1;
+      },
+      (progress: ReturnType<typeof createDailyProgress>) => {
+        progress.rounds[0].completedLoops = LISTENING_LOOPS;
+      },
+      (progress: ReturnType<typeof createDailyProgress>) => {
+        progress.rounds[1].referenceEnded = true;
       },
       (progress: ReturnType<typeof createDailyProgress>) => {
         progress.rounds[0].pattern.kick = [true];
@@ -242,6 +285,24 @@ describe("daily progress persistence", () => {
       }).progress,
     ).toEqual(malformed);
   });
+
+  it.each(["true", 1, null])(
+    "rejects an invalid explicit reference-ended flag %s",
+    (referenceEnded) => {
+      const fresh = createDailyProgress(DATE_KEY);
+      const stored = {
+        ...fresh,
+        rounds: [
+          { ...fresh.rounds[0], referenceEnded },
+          ...fresh.rounds.slice(1),
+        ],
+      };
+      expect(
+        loadDailyProgress(DATE_KEY, { getItem: () => JSON.stringify(stored) })
+          .progress,
+      ).toEqual(fresh);
+    },
+  );
 
   it("copies only valid schema fields rather than trusting saved totals or extra properties", () => {
     const fresh = createDailyProgress(DATE_KEY);
@@ -285,6 +346,7 @@ describe("daily totals and unlimited practice", () => {
     expect(getTotalScore(progress, puzzles)).toBe(0);
     for (let round = 0; round < 3; round += 1) {
       progress.rounds[round].completedLoops = LISTENING_LOOPS;
+      progress.rounds[round].referenceEnded = true;
       progress.rounds[round].pattern = clonePattern(puzzles[round].pattern);
       expect(getTotalScore(progress, puzzles)).toBe(round * 100);
       progress.rounds[round].submitted = true;
@@ -309,14 +371,15 @@ describe("daily totals and unlimited practice", () => {
     answer[extra.id][extra.step] = true;
     progress.rounds[0] = {
       pattern: answer,
-      completedLoops: MIN_LISTENING_LOOPS,
+      completedLoops: 1,
+      referenceEnded: true,
       submitted: true,
     };
     expect(saveDailyProgress(progress, storage)).toBe(true);
     const loaded = loadDailyProgress(DATE_KEY, storage).progress;
     const requiredHits = cells.filter(({ hit }) => hit).length;
     expect(getTotalScore(loaded, puzzles)).toBe(
-      Math.round(100 - (100 / requiredHits) * 2),
+      Math.round((100 * (requiredHits - 1)) / (requiredHits + 1)),
     );
   });
 

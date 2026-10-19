@@ -29,6 +29,7 @@ export interface Puzzle {
 export interface RoundProgress {
   pattern: RhythmPattern;
   completedLoops: number;
+  referenceEnded: boolean;
   submitted: boolean;
 }
 

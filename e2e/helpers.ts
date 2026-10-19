@@ -67,6 +67,7 @@ export async function seedDailyRound(
   watchAudioEngineRequests(page);
   const progress = createDailyProgress(dateKey);
   progress.rounds[0].completedLoops = completedLoops;
+  progress.rounds[0].referenceEnded = completedLoops > 0;
   const record = {
     key: getDailyStorageKey(dateKey),
     value: JSON.stringify(progress),
@@ -86,6 +87,7 @@ export async function unlockCurrentDailyRound(page: Page, dateKey: string) {
         (round: { submitted: boolean }) => !round.submitted,
       );
       current.completedLoops = loops;
+      current.referenceEnded = true;
       localStorage.setItem(key, JSON.stringify(progress));
     },
     { key: getDailyStorageKey(dateKey), loops: MIN_LISTENING_LOOPS },

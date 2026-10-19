@@ -26,6 +26,7 @@ type Mode = "daily" | "practice";
 const freshRound = (): RoundProgress => ({
   pattern: createEmptyPattern(),
   completedLoops: 0,
+  referenceEnded: false,
   submitted: false,
 });
 
@@ -298,7 +299,7 @@ export default function App() {
             </span>
             <p>
               <strong>Listen in.</strong>
-              <span>Up to six loops. One to find your feet.</span>
+              <span>One listening session. Up to six loops.</span>
             </p>
           </div>
           <div>

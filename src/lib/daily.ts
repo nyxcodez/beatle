@@ -4,7 +4,6 @@ import {
   clonePattern,
   createEmptyPattern,
   LISTENING_LOOPS,
-  MIN_LISTENING_LOOPS,
   TRACKS,
   type Puzzle,
   type RoundProgress,
@@ -98,6 +97,7 @@ export function createDailyProgress(dateKey: string): DailyProgress {
     rounds: Array.from({ length: 3 }, () => ({
       pattern: createEmptyPattern(),
       completedLoops: 0,
+      referenceEnded: false,
       submitted: false,
     })),
   };
@@ -106,6 +106,7 @@ export function createDailyProgress(dateKey: string): DailyProgress {
 function isUntouched(round: RoundProgress): boolean {
   return (
     round.completedLoops === 0 &&
+    !round.referenceEnded &&
     TRACKS.every(({ id }) => round.pattern[id].every((hit) => !hit))
   );
 }
@@ -134,6 +135,7 @@ function validateProgress(
     validatePattern(round.pattern);
     if (
       typeof round.submitted !== "boolean" ||
+      typeof round.referenceEnded !== "boolean" ||
       typeof round.completedLoops !== "number" ||
       !Number.isInteger(round.completedLoops) ||
       round.completedLoops < 0 ||
@@ -142,15 +144,18 @@ function validateProgress(
       throw new Error("Invalid round status or completed loop count.");
     }
     if (
-      round.completedLoops < MIN_LISTENING_LOOPS &&
+      !round.referenceEnded &&
       (round.submitted ||
         TRACKS.some(({ id }) =>
           (round.pattern as RoundProgress["pattern"])[id].some(Boolean),
         ))
     ) {
       throw new Error(
-        "Listen to at least one complete loop before creating an answer.",
+        "Finish or stop reference playback before creating an answer.",
       );
+    }
+    if (round.completedLoops === LISTENING_LOOPS && !round.referenceEnded) {
+      throw new Error("Reference playback must end after all six loops.");
     }
     if (
       activeRoundSeen &&
@@ -170,6 +175,7 @@ function copyProgress(progress: DailyProgress): DailyProgress {
       pattern: clonePattern(round.pattern),
       submitted: round.submitted,
       completedLoops: round.completedLoops,
+      referenceEnded: round.referenceEnded,
     })),
   };
 }
@@ -185,6 +191,28 @@ function browserStorage(): Storage | null {
   } catch {
     return null;
   }
+}
+
+/** Earlier v2 records did not track the irreversible end of reference playback. */
+function migrateReferenceState(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  const progress = value as Record<string, unknown>;
+  if (!Array.isArray(progress.rounds)) return value;
+  return {
+    ...progress,
+    rounds: progress.rounds.map((value: unknown) => {
+      if (typeof value !== "object" || value === null) return value;
+      const round = value as Record<string, unknown>;
+      if (Object.hasOwn(round, "referenceEnded")) return round;
+      return {
+        ...round,
+        referenceEnded:
+          (typeof round.completedLoops === "number" &&
+            round.completedLoops > 0) ||
+          round.submitted === true,
+      };
+    }),
+  };
 }
 
 /** A corrupt record resets this day only; unavailable browser storage is reported. */
@@ -204,7 +232,7 @@ export function loadDailyProgress(
   try {
     if (typeof raw !== "string" || raw.length > MAX_RECORD_LENGTH)
       throw new Error("Invalid saved data.");
-    const parsed: unknown = JSON.parse(raw);
+    const parsed: unknown = migrateReferenceState(JSON.parse(raw));
     validateProgress(parsed, dateKey);
     return { progress: copyProgress(parsed), storageAvailable: true };
   } catch {

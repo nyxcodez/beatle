@@ -25,7 +25,6 @@ import { getScoreDetails } from "../lib/scoring";
 import {
   createEmptyPattern,
   LISTENING_LOOPS,
-  MIN_LISTENING_LOOPS,
   STEP_COUNT,
   TRACKS,
   type Puzzle,
@@ -91,13 +90,24 @@ export default function RoundBoard({
     const next = {
       ...progressRef.current,
       completedLoops: Math.min(LISTENING_LOOPS, completedLoops),
+      referenceEnded:
+        progressRef.current.referenceEnded || completedLoops >= LISTENING_LOOPS,
     };
     progressRef.current = next;
     onChangeRef.current(next);
   }
 
-  function stopPlayback() {
+  function endReference() {
+    if (progressRef.current.referenceEnded || progressRef.current.submitted)
+      return;
+    const next = { ...progressRef.current, referenceEnded: true };
+    progressRef.current = next;
+    onChangeRef.current(next);
+  }
+
+  function stopPlayback(endListening = true) {
     requestRef.current += 1;
+    if (endListening && playbackRef.current === "target") endReference();
     playbackRef.current = null;
     engineRef.current?.stop();
     setPlayback(null);
@@ -117,6 +127,7 @@ export default function RoundBoard({
     window.addEventListener("pagehide", onPageHide);
     return () => {
       requestRef.current += 1;
+      if (playbackRef.current === "target") endReference();
       playbackRef.current = null;
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
@@ -165,12 +176,16 @@ export default function RoundBoard({
       stopPlayback();
       return;
     }
+    if (
+      mode === "target" &&
+      (progressRef.current.referenceEnded || progressRef.current.submitted)
+    )
+      return;
+    if (mode === "answer" && !progressRef.current.referenceEnded) return;
     stopPlayback();
     const startingLoops = progressRef.current.completedLoops;
     const remaining = LISTENING_LOOPS - startingLoops;
-    if (mode === "target" && !progressRef.current.submitted && remaining <= 0)
-      return;
-    if (mode === "answer" && startingLoops < MIN_LISTENING_LOOPS) return;
+    if (mode === "target" && remaining <= 0) return;
     const request = ++requestRef.current;
     setLoading(true);
     setAudioError("");
@@ -182,10 +197,7 @@ export default function RoundBoard({
         puzzle.bpm,
         {
           countIn: mode === "target",
-          maxLoops:
-            mode === "target" && !progressRef.current.submitted
-              ? remaining
-              : undefined,
+          maxLoops: mode === "target" ? remaining : undefined,
           onStep: (step) => {
             if (request === requestRef.current) setCurrentStep(step);
           },
@@ -211,7 +223,7 @@ export default function RoundBoard({
       if (request === requestRef.current) setLoading(false);
     } catch {
       if (request !== requestRef.current) return;
-      stopPlayback();
+      stopPlayback(false);
       setAudioError(
         "Audio couldn’t start. Check your sound settings and try again.",
       );
@@ -233,7 +245,7 @@ export default function RoundBoard({
   function toggleCell(track: TrackId, step: number) {
     if (
       progressRef.current.submitted ||
-      progressRef.current.completedLoops < MIN_LISTENING_LOOPS ||
+      !progressRef.current.referenceEnded ||
       playbackRef.current === "target"
     )
       return;
@@ -298,7 +310,7 @@ export default function RoundBoard({
   function submit() {
     if (
       progressRef.current.submitted ||
-      progressRef.current.completedLoops < MIN_LISTENING_LOOPS ||
+      !progressRef.current.referenceEnded ||
       playbackRef.current === "target"
     )
       return;
@@ -309,10 +321,8 @@ export default function RoundBoard({
     setResultView("solution");
   }
 
-  const listeningComplete = progress.completedLoops >= LISTENING_LOOPS;
-  const hasListened = progress.completedLoops >= MIN_LISTENING_LOOPS;
-  const gridLocked =
-    !hasListened || (!progress.submitted && playback === "target");
+  const referenceEnded = progress.referenceEnded;
+  const gridLocked = !referenceEnded;
   const details = progress.submitted
     ? getScoreDetails(progress.pattern, puzzle.pattern)
     : null;
@@ -327,13 +337,13 @@ export default function RoundBoard({
     if (playbackRef.current) {
       stopPlayback();
     } else if (
-      progressRef.current.completedLoops >= MIN_LISTENING_LOOPS &&
+      progressRef.current.referenceEnded &&
       TRACKS.some(({ id }) => progressRef.current.pattern[id].some(Boolean))
     ) {
       void play("answer");
     } else if (
-      progressRef.current.submitted ||
-      progressRef.current.completedLoops < LISTENING_LOOPS
+      !progressRef.current.referenceEnded &&
+      !progressRef.current.submitted
     ) {
       void play("target");
     }
@@ -369,13 +379,14 @@ export default function RoundBoard({
         <button
           className="listen-button"
           onClick={() => void play("target")}
-          disabled={!progress.submitted && listeningComplete}
+          disabled={referenceEnded}
+          title={
+            referenceEnded
+              ? "The original beat cannot be replayed."
+              : "One listening session. Stopping ends it permanently."
+          }
           aria-label={
-            playback === "target"
-              ? "Stop listening"
-              : progress.submitted
-                ? "Play the solution"
-                : "Listen to the beat"
+            playback === "target" ? "Stop listening" : "Listen to the beat"
           }
         >
           {loading && playback === "target" ? (
@@ -392,22 +403,16 @@ export default function RoundBoard({
               ? `Get ready… ${countIn}`
               : playback === "target"
                 ? "Find the groove."
-                : progress.submitted
-                  ? "The original beat"
-                  : listeningComplete
-                    ? "Now, trust your ears."
-                    : "First, catch the beat."}
+                : referenceEnded
+                  ? "Now, trust your ears."
+                  : "First, catch the beat."}
           </h3>
           <p>
-            {progress.submitted
-              ? "Listen again and compare your rhythm."
-              : listeningComplete
-                ? "Six loops heard. The grid is yours—take your time."
-                : playback === "target" && countIn === null && !loading
-                  ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. ${hasListened ? "Pause when you’re ready." : "Listen for one full loop."}`
-                  : hasListened
-                    ? "Ready when you are. Replay the remaining loops or make your beat."
-                    : "Up to six loops. Pause after one full loop when you’re ready."}
+            {referenceEnded
+              ? "Listening is finished. The original beat cannot be replayed."
+              : playback === "target" && countIn === null && !loading
+                ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. Stop when you’re ready—there’s no replay.`
+                : "One chance to listen. Up to six loops; stopping ends playback."}
           </p>
         </div>
         <div
@@ -434,7 +439,7 @@ export default function RoundBoard({
         <div className="listening-clock">
           {progress.submitted ? (
             <span className="unlimited-label">
-              <Headphones size={15} /> REPLAY ANYTIME
+              <Headphones size={15} /> LISTENING FINISHED
             </span>
           ) : (
             <>
@@ -518,9 +523,7 @@ export default function RoundBoard({
             {gridLocked ? (
               <>
                 <LockKeyhole size={13} />
-                {hasListened
-                  ? "Pause the reference to start your beat."
-                  : "Hear one full loop, then pause to unlock the grid."}
+                Listen first. Stop when ready; the original won’t replay.
               </>
             ) : (
               <>
@@ -643,7 +646,7 @@ export default function RoundBoard({
                 <span className="hint-square" />
               )}
               {gridLocked
-                ? "Pause after one full loop, or hear all six."
+                ? "One listening session. Stopping unlocks your grid."
                 : "Tap to add a sound. Enter toggles a pad; Space plays or pauses."}
             </>
           )}
@@ -747,8 +750,8 @@ export default function RoundBoard({
       {progress.submitted && (
         <div className="post-result-actions">
           <span>
-            Score = 100 − (100 ÷ required hits) × (missed + extra hits), with a
-            minimum of 0.
+            Score = correct hits ÷ (required hits + extra hits) × 100. An empty
+            grid scores 0.
           </span>
         </div>
       )}

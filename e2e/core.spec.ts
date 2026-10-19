@@ -106,8 +106,8 @@ test("a complete round: hear exactly six full loops, unlock the grid, play immed
     page.getByRole("button", { name: "The solution", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".pad-mismatch")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Play the solution", exact: true }),
-  ).toBeEnabled();
+  await expect(page.locator(".listen-button")).toBeDisabled();
+  await page.locator(".listen-button").dispatchEvent("click");
+  expect((await audioProbe(page)).plays).toHaveLength(2);
   expect(errors).toEqual([]);
 });
