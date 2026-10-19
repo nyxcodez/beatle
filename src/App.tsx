@@ -9,6 +9,7 @@ import {
   Infinity,
   Sparkles,
 } from "lucide-react";
+import AdSlot from "./components/AdSlot";
 import DailySummary from "./components/DailySummary";
 import DailyStreak from "./components/DailyStreak";
 import HelpDialog from "./components/HelpDialog";
@@ -155,183 +156,187 @@ export default function App() {
         </button>
       </header>
 
-      <main className="main-content">
-        <div className="hero">
-          <div>
-            <p className="eyebrow hero-eyebrow">
-              <span />
-              {mode === "daily"
-                ? "A LITTLE RHYTHM. A DAILY RITUAL."
-                : "NO LIMITS. JUST GOOD VIBRATIONS."}
-            </p>
-            <h1>
-              Find your <span>rhythm.</span>
-            </h1>
-            <p className="hero-description">
-              {mode === "daily"
-                ? "A beat worth listening to. A puzzle worth coming back for."
-                : "More time in the pocket. A fresh groove whenever you want."}
-            </p>
-          </div>
-          <div className="hero-note">
-            <Headphones size={18} />
-            <p>
-              Made for your ears.
-              <br />
-              <strong>And your inner drummer.</strong>
-              <span className="challenge-date">
+      <div className="ad-layout">
+        <AdSlot position="left" />
+        <main className="main-content">
+          <div className="hero">
+            <div>
+              <p className="eyebrow hero-eyebrow">
+                <span />
                 {mode === "daily"
-                  ? `DAILY #${challenge.number} · ${prettyDate.toUpperCase()} · LOCAL`
-                  : "PRACTICE MAKES POCKET."}
-              </span>
-            </p>
-            <Asterisk className="note-spark" size={40} strokeWidth={1.5} />
-          </div>
-        </div>
-
-        {newDayMessage && (
-          <p className="notice-banner" role="status">
-            A new day, a new groove. Your next daily challenge is ready.
-          </p>
-        )}
-        {!storageAvailable && (
-          <p className="notice-banner" role="status">
-            Browser storage is unavailable. You can still play, but your daily
-            progress may not survive a refresh.
-          </p>
-        )}
-
-        <div className="challenge-status">
-          {mode === "daily" ? (
-            <div className="round-tabs" aria-label="Daily rounds">
-              {daily.rounds.map((round, index) => (
-                <button
-                  key={index}
-                  className={`round-tab ${index === roundIndex && !showSummary ? "active" : ""} ${round.submitted ? "complete" : ""}`}
-                  disabled={index > Math.min(activeRound, 2)}
-                  aria-label={`Round ${index + 1}${round.submitted ? ", complete" : index > activeRound ? ", locked" : ", current"}`}
-                  aria-current={
-                    index === roundIndex && !showSummary ? "step" : undefined
-                  }
-                  title={`Round ${index + 1}: ${challenge.puzzles[index].difficulty}`}
-                  onClick={() => {
-                    setSelectedRound(index);
-                    setSummaryVisible(false);
-                  }}
-                >
-                  <span>
-                    {round.submitted ? <Check size={11} /> : index + 1}
-                  </span>
-                  Round {String(index + 1).padStart(2, "0")}
-                </button>
-              ))}
+                  ? "A LITTLE RHYTHM. A DAILY RITUAL."
+                  : "NO LIMITS. JUST GOOD VIBRATIONS."}
+              </p>
+              <h1>
+                Find your <span>rhythm.</span>
+              </h1>
+              <p className="hero-description">
+                {mode === "daily"
+                  ? "A beat worth listening to. A puzzle worth coming back for."
+                  : "More time in the pocket. A fresh groove whenever you want."}
+              </p>
             </div>
-          ) : (
-            <div className="practice-tag">
-              <Infinity size={16} />
-              <span>THE PRACTICE ROOM</span>
-              <small>Unlimited rounds</small>
-            </div>
-          )}
-          <p className="total-score">
-            {mode === "daily" ? "YOUR SCORE" : "ROUND SCORE"}
-            <strong>
-              {mode === "daily"
-                ? total
-                : practice.progress.submitted
-                  ? scorePattern(
-                      practice.progress.pattern,
-                      practice.puzzle.pattern,
-                    )
-                  : "—"}
-              <span>/ {mode === "daily" ? "300" : "100"}</span>
-            </strong>
-          </p>
-        </div>
-
-        {mode === "daily" && (
-          <DailyStreak days={streak} completedToday={activeRound === 3} />
-        )}
-
-        <div id="game" className="game-container" ref={gameRef} tabIndex={-1}>
-          {showSummary ? (
-            <DailySummary
-              challengeNumber={challenge.number}
-              progress={daily}
-              puzzles={challenge.puzzles}
-              streak={streak}
-              onPractice={() => {
-                switchMode("practice");
-                scrollToGame();
-              }}
-              onReview={() => {
-                setSummaryVisible(false);
-                setSelectedRound(0);
-                scrollToGame();
-              }}
-            />
-          ) : (
-            <RoundBoard
-              key={
-                mode === "daily"
-                  ? `daily:${daily.dateKey}:${roundIndex}`
-                  : `practice:${practice.roundNumber}:${practice.puzzle.id}`
-              }
-              puzzle={currentPuzzle}
-              roundNumber={
-                mode === "daily" ? roundIndex + 1 : practice.roundNumber
-              }
-              progress={currentProgress}
-              onChange={updateProgress}
-              onSubmit={submitProgress}
-              onNext={nextRound}
-              nextLabel={
-                mode === "practice"
-                  ? "Another groove"
-                  : roundIndex === 2
-                    ? "See daily results"
-                    : "Next round"
-              }
-              onHelp={() => setShowHelp(true)}
-              suspendPlayback={showHelp}
-            />
-          )}
-        </div>
-
-        <div className="how-it-works">
-          <div>
-            <span className="tip-icon">
+            <div className="hero-note">
               <Headphones size={18} />
-            </span>
-            <p>
-              <strong>Listen in.</strong>
-              <span>One listening session. Up to six loops.</span>
-            </p>
+              <p>
+                Made for your ears.
+                <br />
+                <strong>And your inner drummer.</strong>
+                <span className="challenge-date">
+                  {mode === "daily"
+                    ? `DAILY #${challenge.number} · ${prettyDate.toUpperCase()} · LOCAL`
+                    : "PRACTICE MAKES POCKET."}
+                </span>
+              </p>
+              <Asterisk className="note-spark" size={40} strokeWidth={1.5} />
+            </div>
           </div>
-          <div>
-            <span className="tip-icon">
-              <AudioLines size={18} />
-            </span>
-            <p>
-              <strong>Tap it out.</strong>
-              <span>Three sounds. Sixteen steps. Your call.</span>
+
+          {newDayMessage && (
+            <p className="notice-banner" role="status">
+              A new day, a new groove. Your next daily challenge is ready.
             </p>
-          </div>
-          <div>
-            <span className="tip-icon">
-              <Sparkles size={18} />
-            </span>
-            <p>
-              <strong>Find your flow.</strong>
-              <span>
+          )}
+          {!storageAvailable && (
+            <p className="notice-banner" role="status">
+              Browser storage is unavailable. You can still play, but your daily
+              progress may not survive a refresh.
+            </p>
+          )}
+
+          <div className="challenge-status">
+            {mode === "daily" ? (
+              <div className="round-tabs" aria-label="Daily rounds">
+                {daily.rounds.map((round, index) => (
+                  <button
+                    key={index}
+                    className={`round-tab ${index === roundIndex && !showSummary ? "active" : ""} ${round.submitted ? "complete" : ""}`}
+                    disabled={index > Math.min(activeRound, 2)}
+                    aria-label={`Round ${index + 1}${round.submitted ? ", complete" : index > activeRound ? ", locked" : ", current"}`}
+                    aria-current={
+                      index === roundIndex && !showSummary ? "step" : undefined
+                    }
+                    title={`Round ${index + 1}: ${challenge.puzzles[index].difficulty}`}
+                    onClick={() => {
+                      setSelectedRound(index);
+                      setSummaryVisible(false);
+                    }}
+                  >
+                    <span>
+                      {round.submitted ? <Check size={11} /> : index + 1}
+                    </span>
+                    Round {String(index + 1).padStart(2, "0")}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="practice-tag">
+                <Infinity size={16} />
+                <span>THE PRACTICE ROOM</span>
+                <small>Unlimited rounds</small>
+              </div>
+            )}
+            <p className="total-score">
+              {mode === "daily" ? "YOUR SCORE" : "ROUND SCORE"}
+              <strong>
                 {mode === "daily"
-                  ? "Three rounds. A fresh beat every day."
-                  : "No daily limit. Just one more groove."}
-              </span>
+                  ? total
+                  : practice.progress.submitted
+                    ? scorePattern(
+                        practice.progress.pattern,
+                        practice.puzzle.pattern,
+                      )
+                    : "—"}
+                <span>/ {mode === "daily" ? "300" : "100"}</span>
+              </strong>
             </p>
           </div>
-        </div>
-      </main>
+
+          {mode === "daily" && (
+            <DailyStreak days={streak} completedToday={activeRound === 3} />
+          )}
+
+          <div id="game" className="game-container" ref={gameRef} tabIndex={-1}>
+            {showSummary ? (
+              <DailySummary
+                challengeNumber={challenge.number}
+                progress={daily}
+                puzzles={challenge.puzzles}
+                streak={streak}
+                onPractice={() => {
+                  switchMode("practice");
+                  scrollToGame();
+                }}
+                onReview={() => {
+                  setSummaryVisible(false);
+                  setSelectedRound(0);
+                  scrollToGame();
+                }}
+              />
+            ) : (
+              <RoundBoard
+                key={
+                  mode === "daily"
+                    ? `daily:${daily.dateKey}:${roundIndex}`
+                    : `practice:${practice.roundNumber}:${practice.puzzle.id}`
+                }
+                puzzle={currentPuzzle}
+                roundNumber={
+                  mode === "daily" ? roundIndex + 1 : practice.roundNumber
+                }
+                progress={currentProgress}
+                onChange={updateProgress}
+                onSubmit={submitProgress}
+                onNext={nextRound}
+                nextLabel={
+                  mode === "practice"
+                    ? "Another groove"
+                    : roundIndex === 2
+                      ? "See daily results"
+                      : "Next round"
+                }
+                onHelp={() => setShowHelp(true)}
+                suspendPlayback={showHelp}
+              />
+            )}
+          </div>
+
+          <div className="how-it-works">
+            <div>
+              <span className="tip-icon">
+                <Headphones size={18} />
+              </span>
+              <p>
+                <strong>Listen in.</strong>
+                <span>One listening session. Up to six loops.</span>
+              </p>
+            </div>
+            <div>
+              <span className="tip-icon">
+                <AudioLines size={18} />
+              </span>
+              <p>
+                <strong>Tap it out.</strong>
+                <span>Three sounds. Sixteen steps. Your call.</span>
+              </p>
+            </div>
+            <div>
+              <span className="tip-icon">
+                <Sparkles size={18} />
+              </span>
+              <p>
+                <strong>Find your flow.</strong>
+                <span>
+                  {mode === "daily"
+                    ? "Three rounds. A fresh beat every day."
+                    : "No daily limit. Just one more groove."}
+                </span>
+              </p>
+            </div>
+          </div>
+        </main>
+        <AdSlot position="right" />
+      </div>
       <footer className="site-footer">
         <p>
           A daily dose of <span>good vibrations.</span>

@@ -47,6 +47,25 @@ Set `CHROMIUM_PATH` to use a different Chromium executable.
 
 `npm run preview` serves the production build. Deploy `dist/` to any static host. For a subdirectory deployment, set Vite’s `base` first.
 
+## Google AdSense
+
+The desktop layout has a **160 × 600** display ad space on each side of the game. Both spaces are hidden below 1280px, and hidden slots do not request ads. The game remains playable if an ad is blocked or fails to load. Unconfigured slots show a neutral reserved space.
+
+Create two display ad units in your AdSense account, then copy `.env.example` to `.env.local` and set:
+
+```dotenv
+VITE_ADSENSE_CLIENT=your-ca-pub-publisher-id
+VITE_ADSENSE_LEFT_SLOT=your-left-numeric-slot-id
+VITE_ADSENSE_RIGHT_SLOT=your-right-numeric-slot-id
+VITE_ADSENSE_TEST_MODE=true
+```
+
+Use your actual `ca-pub-` publisher ID and the numeric slot IDs from the ad-unit code. These values are public configuration. The Google script loads once and each visible slot requests one ad; mode switches and resizes do not refresh the ads. Keep test mode enabled while verifying the integration, then set `VITE_ADSENSE_TEST_MODE=false` for live ads. Real ad delivery requires an approved AdSense account/site and available inventory.
+
+For deployment, set the same variables in the hosting provider’s build environment and redeploy. Vite embeds them at build time, so changing a local environment file requires restarting the development server, and production changes require a new build. Publisher IDs are not bundled until configured; no Google requests are made with empty or invalid configuration.
+
+If AdSense provides an `ads.txt` entry for your account, place that exact entry in `public/ads.txt` so it is served from the site root. Keep AdSense Auto ads disabled if you only want the two manually placed side units.
+
 ## Structure
 
 | Module                            | Responsibility                                                         |
@@ -63,6 +82,8 @@ Set `CHROMIUM_PATH` to use a different Chromium executable.
 | `src/components/DailySummary.tsx` | Daily totals, copyable results, reset countdown                        |
 | `src/components/DailyStreak.tsx`  | Daily streak count and completion feedback                             |
 | `src/components/HelpDialog.tsx`   | Accessible instructions dialog                                         |
+| `src/components/AdSlot.tsx`       | Desktop ad placement, visibility, and graceful fallback                |
+| `src/lib/adsense.ts`              | AdSense configuration, one-time script loading and slot requests       |
 | `src/App.tsx`                     | Daily/practice orchestration and round navigation                      |
 
 The core round was implemented and passed browser tests before adding the daily system. The grid, audio engine, scoring, and selection logic are independent modules so they can evolve separately.
