@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { completeListeningWithoutAudio, seedDailyRound } from "./helpers";
+import {
+  audioProbe,
+  completeListeningWithoutAudio,
+  installAudioProbe,
+  seedDailyRound,
+} from "./helpers";
 
 async function expectNoPageOverflow(page: Page) {
   const widths = await page.evaluate(() => ({
@@ -84,6 +89,11 @@ test("keyboard users can open instructions, remain inside the modal, and return 
   page,
 }) => {
   await page.goto("/");
+  await expect(
+    page.getByRole("group", {
+      name: /Your rhythm\. Use arrow keys to move, Enter to toggle a hit, and Space to play or pause\./,
+    }),
+  ).toBeVisible();
   const help = page.locator(".header-help");
   await help.focus();
   await page.keyboard.press("Enter");
@@ -119,7 +129,7 @@ test("mode, pad, and solution controls expose state and preserve keyboard focus"
   await expect(daily).toHaveAttribute("aria-pressed", "true");
   await expect(practice).toHaveAttribute("aria-pressed", "false");
   await practice.focus();
-  await page.keyboard.press("Space");
+  await page.keyboard.press("Enter");
   await expect(practice).toHaveAttribute("aria-pressed", "true");
   await expect(daily).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".pad:disabled")).toHaveCount(48);
@@ -131,7 +141,7 @@ test("mode, pad, and solution controls expose state and preserve keyboard focus"
   const kick = page.getByRole("button", { name: "Kick, step 1", exact: true });
   await kick.focus();
   await expect(kick).toHaveAttribute("aria-pressed", "false");
-  await page.keyboard.press("Space");
+  await page.keyboard.press("Enter");
   await expect(kick).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Enter");
   await expect(kick).toHaveAttribute("aria-pressed", "false");
@@ -139,7 +149,7 @@ test("mode, pad, and solution controls expose state and preserve keyboard focus"
   await expect(
     page.getByRole("button", { name: "Snare, step 1", exact: true }),
   ).toBeFocused();
-  await page.keyboard.press("Space");
+  await page.keyboard.press("Enter");
 
   await page.getByRole("button", { name: "Submit beat", exact: true }).focus();
   await page.keyboard.press("Enter");
@@ -155,7 +165,7 @@ test("mode, pad, and solution controls expose state and preserve keyboard focus"
   await expect(submittedSnare).toHaveAttribute("aria-disabled", "true");
   await expect(submittedSnare).toHaveAttribute("aria-pressed", "true");
   await submittedSnare.focus();
-  await page.keyboard.press("Space");
+  await page.keyboard.press("Enter");
   await expect(submittedSnare).toHaveAttribute("aria-pressed", "true");
   await page
     .getByRole("button", { name: "Another groove", exact: true })
@@ -197,4 +207,84 @@ test("reduced motion stops waveform animation and control transitions during pla
   await page
     .getByRole("button", { name: "Stop listening", exact: true })
     .click();
+});
+
+test("Space toggles playback without toggling focused pads and ignores repeated keys, text fields, and dialogs", async ({
+  page,
+}) => {
+  await seedDailyRound(page);
+  await page.goto("/");
+  await installAudioProbe(page);
+  const kick = page.getByRole("button", { name: "Kick, step 1", exact: true });
+  await kick.focus();
+  await page.keyboard.press("Enter");
+  await expect(kick).toHaveAttribute("aria-pressed", "true");
+  const focusedPad = page.getByRole("button", {
+    name: "Snare, step 3",
+    exact: true,
+  });
+  await focusedPad.focus();
+  await page.keyboard.down("Space");
+  await expect(
+    page.getByRole("button", { name: "Pause", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.down("Space");
+  await page.keyboard.up("Space");
+  await expect(
+    page.getByRole("button", { name: "Pause", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".pad-playing")).toHaveCount(3, { timeout: 1_000 });
+  await expect(focusedPad).toHaveAttribute("aria-pressed", "false");
+  expect((await audioProbe(page)).plays).toHaveLength(1);
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("button", { name: "Play", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".pad-playing")).toHaveCount(0);
+  await expect(focusedPad).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("button", { name: "Pause", exact: true }),
+  ).toBeVisible();
+  expect((await audioProbe(page)).plays).toHaveLength(2);
+
+  await page.evaluate(() => {
+    const input = document.createElement("input");
+    input.id = "shortcut-input";
+    input.setAttribute("aria-label", "Shortcut test text field");
+    const editable = document.createElement("div");
+    editable.id = "shortcut-editable";
+    editable.contentEditable = "true";
+    editable.setAttribute("role", "textbox");
+    document.body.append(input, editable);
+  });
+  await page.locator("#shortcut-input").focus();
+  await page.keyboard.press("Space");
+  await expect(page.locator("#shortcut-input")).toHaveValue(" ");
+  await page.locator("#shortcut-editable").focus();
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("button", { name: "Pause", exact: true }),
+  ).toBeVisible();
+  expect((await audioProbe(page)).plays).toHaveLength(2);
+  await page.locator(".header-help").click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.focus();
+  await page.keyboard.press("Space");
+  await expect(dialog).toBeVisible();
+  expect((await audioProbe(page)).plays).toHaveLength(2);
+  await expect(page.locator(".pad-playing")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await focusedPad.focus();
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("button", { name: "Pause", exact: true }),
+  ).toBeVisible();
+  expect((await audioProbe(page)).plays).toHaveLength(3);
+  await expect(focusedPad).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("button", { name: "Play", exact: true }),
+  ).toBeVisible();
 });

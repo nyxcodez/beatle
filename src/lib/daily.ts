@@ -4,6 +4,7 @@ import {
   clonePattern,
   createEmptyPattern,
   LISTENING_LOOPS,
+  MIN_LISTENING_LOOPS,
   TRACKS,
   type Puzzle,
   type RoundProgress,
@@ -11,7 +12,7 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const FIRST_CHALLENGE_UTC = Date.UTC(2026, 0, 1);
-// New listening and scoring rules start fresh without modifying earlier records.
+// Keep the loop-based schema so existing saved attempts remain available.
 const STORAGE_PREFIX = "beatle:daily:v2:";
 const MAX_RECORD_LENGTH = 16_384;
 
@@ -141,13 +142,15 @@ function validateProgress(
       throw new Error("Invalid round status or completed loop count.");
     }
     if (
-      round.completedLoops < LISTENING_LOOPS &&
+      round.completedLoops < MIN_LISTENING_LOOPS &&
       (round.submitted ||
         TRACKS.some(({ id }) =>
           (round.pattern as RoundProgress["pattern"])[id].some(Boolean),
         ))
     ) {
-      throw new Error("Listen to all six loops before creating an answer.");
+      throw new Error(
+        "Listen to at least one complete loop before creating an answer.",
+      );
     }
     if (
       activeRoundSeen &&

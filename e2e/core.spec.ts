@@ -45,7 +45,7 @@ test("a complete round: hear exactly six full loops, unlock the grid, play immed
   await expect(loops).toHaveAttribute("aria-valuenow", "5", {
     timeout: 18_000,
   });
-  // Finishing five loops must not unlock the final loop early.
+  // The grid stays locked while the reference is still playing.
   await expect(firstPad).toBeDisabled();
   await expect(submit).toBeDisabled();
   await expect(loops).toHaveAttribute("aria-valuenow", "6", { timeout: 5_000 });
@@ -61,6 +61,7 @@ test("a complete round: hear exactly six full loops, unlock the grid, play immed
   await page.waitForTimeout(250);
   const target = (await audioProbe(page)).plays[0];
   expect(target.loopCallbacks).toEqual([1, 2, 3, 4, 5, 6]);
+  expect(target.countIns.filter((beat) => beat !== null)).toEqual([3, 2, 1]);
   expect(target.firstSteps).toBe(6);
   expect(target.complete).toBe(true);
 
@@ -71,9 +72,9 @@ test("a complete round: hear exactly six full loops, unlock the grid, play immed
     exact: true,
   });
   await expect(secondPad).toBeFocused();
-  await page.keyboard.press("Space");
+  await page.keyboard.press("Enter");
   await expect(secondPad).toHaveAttribute("aria-pressed", "true");
-  await page.keyboard.press("Space");
+  await page.keyboard.press("Enter");
   expect((await audioProbe(page)).previews).toEqual(["kick"]);
   await fillPuzzle(page, puzzle);
   const play = page.getByRole("button", { name: "Play", exact: true });
@@ -93,12 +94,12 @@ test("a complete round: hear exactly six full loops, unlock the grid, play immed
   expect(placement).toEqual({ below: true, aboveGrid: true });
   await play.click();
   await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
+    page.getByRole("button", { name: "Pause", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".pad-playing")).toHaveCount(3, { timeout: 1_000 });
   await expect(page.getByRole("button", { name: /Count-in/ })).toHaveCount(0);
   expect((await audioProbe(page)).plays[1].countIn).toBe(false);
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
   await submit.click();
   await expect(page.locator(".round-result")).toContainText("100%");
   await expect(

@@ -61,10 +61,11 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
             <div>
               <h3>Catch the beat.</h3>
               <p>
-                Press the coral button for a four-beat count-in, then hear the
-                loop six times. The grid stays locked until all six loops
-                finish. If you pause, completed loops are saved; an interrupted
-                loop starts over when you resume.
+                Press the coral button for a three-tick “3, 2, 1” count-in. Hear
+                up to six loops, or pause after one complete loop to start
+                creating your beat. The grid stays locked while the reference is
+                playing. Completed loops are saved; an interrupted loop starts
+                over when you listen again.
               </p>
             </div>
           </li>
@@ -82,11 +83,12 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
                 clicking their names.
               </p>
               <p>
-                Use arrow keys to move around the grid, and Space or Enter to
-                toggle a pad. Switching a pad on plays its sound; switching it
-                off is silent. The Play button below “Your sequence” starts your
-                beat immediately, with no count-in. There’s no time limit to
-                edit or play your own beat.
+                Use arrow keys to move around the grid and Enter to toggle a
+                pad. Space plays or pauses the active loop. Switching a pad on
+                plays its sound; switching it off is silent. Play starts your
+                beat immediately, without a count-in. You can edit or clear pads
+                while your beat keeps playing—changes flow into the loop without
+                restarting it. There’s no time limit to edit.
               </p>
             </div>
           </li>
@@ -97,10 +99,12 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
             <div>
               <h3>Trust your ears.</h3>
               <p>
-                Submit when you’re ready. Your score is 100 − (100 ÷ n) × m: n
-                is the number of required hits, and m is the number you missed.
-                Extra hits don’t reduce your score. The percentage is rounded to
-                a whole number. Three rounds add up to a maximum of 300 points.
+                Submit when you’re ready. Your score is 100 − (100 ÷ n) ×
+                (missed + extra hits), where n is the number of required hits.
+                Missing a required hit and adding an extra hit carry the same
+                penalty. The percentage is rounded to a whole number and never
+                falls below zero. Three rounds add up to a maximum of 300
+                points.
               </p>
             </div>
           </li>

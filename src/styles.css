@@ -3,6 +3,7 @@
 @theme {
   --font-sans: "DM Sans Variable", sans-serif;
   --color-coral: #ff8c7d;
+  --color-cyan: #62dce8;
   --color-navy: #101a2a;
 }
 
@@ -16,6 +17,7 @@
   -moz-osx-font-smoothing: grayscale;
   --muted: #8290a7;
   --coral: #ff8c7d;
+  --cyan: #62dce8;
   --border: #2a3548;
 }
 * {
@@ -61,7 +63,7 @@ button svg {
 }
 ::selection {
   color: #101a2a;
-  background: #ff8c7d;
+  background: var(--cyan);
 }
 .app-shell {
   max-width: 1440px;
@@ -87,7 +89,7 @@ button svg {
   letter-spacing: -1.7px;
 }
 .brand-dot {
-  color: var(--coral);
+  color: var(--cyan);
 }
 .brand-mark {
   display: flex;
@@ -105,12 +107,14 @@ button svg {
 }
 .brand-mark i:nth-child(2) {
   height: 28px;
+  background: var(--cyan);
 }
 .brand-mark i:nth-child(3) {
   height: 21px;
 }
 .brand-mark i:nth-child(4) {
   height: 12px;
+  background: var(--cyan);
 }
 .mode-nav {
   display: flex;
@@ -149,7 +153,7 @@ button svg {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--coral);
+  background: var(--cyan);
 }
 .header-help {
   display: flex;
@@ -202,7 +206,7 @@ h1 {
   line-height: 1.15;
 }
 h1 > span {
-  color: var(--coral);
+  color: var(--cyan);
 }
 .hero-description {
   font-size: 13px;
@@ -270,11 +274,11 @@ h1 > span {
   color: #f1f0ed;
 }
 .round-tab.active > span {
-  background: var(--coral);
+  background: var(--cyan);
   color: #172133;
-  border-color: var(--coral);
+  border-color: var(--cyan);
   font-weight: 700;
-  box-shadow: 0 0 0 4px #ff8c7d09;
+  box-shadow: 0 0 0 4px #62dce80d;
 }
 .round-tab.complete {
   color: #b7c5ca;
@@ -450,7 +454,7 @@ h1 > span {
   background: #ba9d90;
 }
 .waveform span.wave-current {
-  background: var(--coral);
+  background: var(--cyan);
 }
 .waveform-active span {
   animation: wave-bounce 0.55s ease-in-out infinite alternate;
@@ -517,11 +521,11 @@ h1 > span {
 .listening-progress > span {
   height: 100%;
   display: block;
-  background: #b7867d;
+  background: #529ba4;
   transition: width 0.2s linear;
 }
 .is-playing .listening-progress > span {
-  background: var(--coral);
+  background: var(--cyan);
 }
 .sequence-heading {
   margin: 29px 0 20px;
@@ -546,18 +550,46 @@ h1 > span {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
   margin: -4px 0 20px;
 }
 .sequence-playback > .secondary-button {
   min-width: 92px;
+  border-color: #62dce84d;
+  color: #a2edf4;
+  background: #62dce80b;
 }
 .sequence-phase-note {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #a5b8c9;
+  color: #a0c7d1;
   font-size: 11px;
   line-height: 1.6;
+  flex: 1;
+  min-width: 180px;
+}
+.keyboard-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8db9c3;
+  font-size: 10px;
+  margin-left: auto;
+}
+.keyboard-shortcut kbd {
+  color: #a3eaf1;
+  font: inherit;
+  font-size: 9px;
+  border: 1px solid #62dce83d;
+  border-bottom-width: 2px;
+  background: #62dce808;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.listen-panel.is-playing {
+  border-color: #62dce85c;
+  box-shadow: 0 0 24px #62dce807;
 }
 .sequence-phase-note svg {
   flex-shrink: 0;
@@ -840,8 +872,14 @@ h1 > span {
   border-color: #58647a;
 }
 .secondary-button.button-playing {
-  color: #a9e7dd;
-  border-color: #62968e;
+  color: #102331;
+  border-color: var(--cyan);
+  background: var(--cyan);
+}
+.sequence-playback > .secondary-button.button-playing:hover {
+  color: #102331;
+  border-color: #b2f1f6;
+  background: #91e7f0;
 }
 .submit-area {
   display: flex;
@@ -859,8 +897,8 @@ h1 > span {
   gap: 19px;
   min-height: 43px;
   padding: 0 19px;
-  border: 1px solid #ffab9b;
-  background: var(--coral);
+  border: 1px solid #a1edf4;
+  background: var(--cyan);
   color: #182132;
   border-radius: 7px;
   font-size: 11px;
@@ -868,8 +906,8 @@ h1 > span {
   box-shadow: 0 3px 9px #0002;
 }
 .primary-button:hover {
-  background: #ffa293;
-  box-shadow: 0 3px 14px #ff8c7d12;
+  background: #91e7f0;
+  box-shadow: 0 3px 14px #62dce824;
 }
 .board-bottom-note {
   display: flex;
@@ -1678,6 +1716,19 @@ h1 > span {
   }
 }
 @media (max-width: 600px) {
+  .sequence-playback {
+    gap: 10px 12px;
+  }
+  .sequence-phase-note {
+    min-width: 0;
+    flex-basis: calc(100% - 110px);
+    font-size: 10px;
+  }
+  .keyboard-shortcut {
+    margin-left: 104px;
+    flex-basis: calc(100% - 104px);
+    font-size: 9px;
+  }
   .app-shell {
     padding: 0 18px;
   }

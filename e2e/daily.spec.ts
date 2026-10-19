@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { getDailyChallenge } from "../src/lib/daily";
-import { TRACKS } from "../src/lib/types";
+import { MIN_LISTENING_LOOPS, TRACKS } from "../src/lib/types";
 import {
   completeListeningWithoutAudio,
   fillPuzzle,
@@ -12,7 +12,7 @@ import {
 const DATE_KEY = "2026-10-18";
 const FIXED_TIME = new Date(`${DATE_KEY}T12:00:00.000Z`);
 
-test("three sequential daily rounds score 300 despite extra pads, persist, and remain immutable in review", async ({
+test("three sequential daily rounds score 300, persist after one reference bar, and remain immutable in review", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -34,19 +34,6 @@ test("three sequential daily rounds score 300 despite extra pads, persist, and r
       `Round ${index + 1}`,
     );
     await fillPuzzle(page, puzzles[index]);
-    const extra = TRACKS.flatMap((track) =>
-      puzzles[index].pattern[track.id].map((hit, step) => ({
-        hit,
-        label: track.label,
-        step,
-      })),
-    ).find((cell) => !cell.hit)!;
-    await page
-      .getByRole("button", {
-        name: `${extra.label}, step ${extra.step + 1}`,
-        exact: true,
-      })
-      .click();
     await page
       .getByRole("button", { name: "Submit beat", exact: true })
       .click();
@@ -57,7 +44,7 @@ test("three sequential daily rounds score 300 despite extra pads, persist, and r
     await expect(
       page.getByRole("group", { name: "Correct solution", exact: true }),
     ).toBeVisible();
-    await expect(page.locator(".pad-mismatch")).toHaveCount(1);
+    await expect(page.locator(".pad-mismatch")).toHaveCount(0);
     await expect(page.locator('.pad[aria-disabled="true"]')).toHaveCount(48);
     await expect(page.locator(".total-score strong")).toHaveText(
       new RegExp(`^${(index + 1) * 100}\\s*\\/\\s*300$`),
@@ -89,7 +76,7 @@ test("three sequential daily rounds score 300 despite extra pads, persist, and r
   expect(
     JSON.parse(completedRecord!).rounds.every(
       (round: { submitted: boolean; completedLoops: number }) =>
-        round.submitted && round.completedLoops === 6,
+        round.submitted && round.completedLoops === MIN_LISTENING_LOOPS,
     ),
   ).toBe(true);
   await page.reload();
@@ -114,7 +101,7 @@ test("three sequential daily rounds score 300 despite extra pads, persist, and r
     const pad = page.locator(".pad").first();
     const original = await pad.getAttribute("aria-pressed");
     await pad.focus();
-    await page.keyboard.press("Space");
+    await page.keyboard.press("Enter");
     await expect(pad).toHaveAttribute("aria-pressed", original!);
     await expect(
       page.getByRole("button", { name: "Submit beat", exact: true }),
@@ -135,7 +122,7 @@ test("unlocked notes and completed listening loops survive reload with unlimited
     .getByRole("button", { name: "Snare, step 7", exact: true })
     .click();
   const record = JSON.parse((await savedDaily(page, DATE_KEY))!);
-  expect(record.rounds[0].completedLoops).toBe(6);
+  expect(record.rounds[0].completedLoops).toBe(MIN_LISTENING_LOOPS);
   expect(record.rounds[0].submitted).toBe(false);
   await page.reload();
   await expect(
@@ -146,14 +133,14 @@ test("unlocked notes and completed listening loops survive reload with unlimited
   ).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("progressbar", { name: "Loops completed" }),
-  ).toHaveAttribute("aria-valuenow", "6");
+  ).toHaveAttribute("aria-valuenow", "1");
   await expect(
     page.getByRole("button", { name: "Round 2, locked", exact: true }),
   ).toBeDisabled();
   await page.clock.fastForward(120_000);
   await expect(page.getByRole("progressbar")).toHaveAttribute(
     "aria-valuenow",
-    "6",
+    "1",
   );
   await page
     .getByRole("button", { name: "Hi-hat, step 16", exact: true })
@@ -257,4 +244,35 @@ test("UTC midnight starts a fresh locked day and preserves the prior day record"
     .dispatchEvent("click");
   await expect(page.locator(".pad-active")).toHaveCount(0);
   expect(await savedDaily(page, DATE_KEY)).toBe(previousDay);
+});
+
+test("missing every required hit plus an extra pad clamps the displayed score at zero", async ({
+  page,
+}) => {
+  await page.clock.install({ time: FIXED_TIME });
+  await seedDailyRound(page, DATE_KEY);
+  await page.goto("/");
+  const puzzle = getDailyChallenge(DATE_KEY).puzzles[0];
+  const cells = TRACKS.flatMap((track) =>
+    puzzle.pattern[track.id].map((hit, step) => ({
+      hit,
+      label: track.label,
+      step,
+    })),
+  );
+  const extra = cells.find((cell) => !cell.hit)!;
+  await page
+    .getByRole("button", {
+      name: `${extra.label}, step ${extra.step + 1}`,
+      exact: true,
+    })
+    .click();
+  await page.getByRole("button", { name: "Submit beat", exact: true }).click();
+  await expect(page.locator(".round-result")).toContainText("0% accuracy");
+  await expect(page.locator(".pad-mismatch")).toHaveCount(
+    cells.filter((cell) => cell.hit).length + 1,
+  );
+  await expect(page.locator(".total-score strong")).toHaveText(
+    /^0\s*\/\s*300$/,
+  );
 });

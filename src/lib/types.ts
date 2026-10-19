@@ -1,4 +1,5 @@
 export const STEP_COUNT = 16;
+export const MIN_LISTENING_LOOPS = 1;
 export const LISTENING_LOOPS = 6;
 
 export type TrackId = "kick" | "snare" | "hihat";

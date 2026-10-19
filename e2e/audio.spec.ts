@@ -1,6 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { getDailyChallenge, getUTCDateKey } from "../src/lib/daily";
-import { TRACKS } from "../src/lib/types";
+import { LISTENING_LOOPS, TRACKS } from "../src/lib/types";
 import {
   audioProbe,
   installAudioProbe,
@@ -8,10 +8,7 @@ import {
   startTargetLoop,
 } from "./helpers";
 
-async function completedLoops(
-  page: import("@playwright/test").Page,
-  key: string,
-): Promise<number> {
+async function completedLoops(page: Page, key: string): Promise<number> {
   return page.evaluate(
     (storageKey) =>
       JSON.parse(localStorage.getItem(storageKey)!).rounds[0].completedLoops,
@@ -19,75 +16,79 @@ async function completedLoops(
   );
 }
 
-test("count-in and partial loops earn no credit; completed loops survive pause, reload, and resume", async ({
+test("Space pauses the reference; one full bar unlocks editing and submission and survives reload", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  const storageKey = await seedDailyRound(page, getUTCDateKey(), 4);
+  const storageKey = await seedDailyRound(page, getUTCDateKey(), 0);
   await page.goto("/");
   await installAudioProbe(page);
   const loops = page.getByRole("progressbar", { name: "Loops completed" });
-  await expect(loops).toHaveAttribute("aria-valuenow", "4");
+  const submit = page.getByRole("button", { name: "Submit beat", exact: true });
   await expect(page.locator(".pad:disabled")).toHaveCount(48);
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("heading", { name: "Get ready… 3" }),
+  ).toBeVisible();
+  await page.keyboard.press("Space");
+  expect(await completedLoops(page, storageKey)).toBe(0);
+  expect((await audioProbe(page)).plays[0].loopCallbacks).toEqual([]);
+  await expect(page.locator(".pad:disabled")).toHaveCount(48);
+  await expect(submit).toBeDisabled();
+
+  await startTargetLoop(page);
+  await page.waitForTimeout(250);
+  expect(await completedLoops(page, storageKey)).toBe(0);
+  await expect(loops).toHaveAttribute("aria-valuenow", "1", { timeout: 5_000 });
+  await expect(page.locator(".pad:disabled")).toHaveCount(48);
+  await expect(submit).toBeDisabled();
+  await page.keyboard.press("Space");
+  await expect(page.locator(".pad-playing")).toHaveCount(0);
+  await expect(page.locator(".pad:disabled")).toHaveCount(0);
+  await expect(submit).toBeEnabled();
+  const heard = (await audioProbe(page)).plays[1];
+  expect(heard.maxLoops).toBe(6);
+  expect(heard.loopCallbacks).toEqual([1]);
+  expect(heard.countIns.filter((beat) => beat !== null)).toEqual([3, 2, 1]);
+  await page.waitForTimeout(250);
+  expect(await completedLoops(page, storageKey)).toBe(1);
+  await page.getByRole("button", { name: "Kick, step 1", exact: true }).click();
+  await page.reload();
+  await installAudioProbe(page);
+  await expect(loops).toHaveAttribute("aria-valuenow", "1");
+  await expect(
+    page.getByRole("button", { name: "Kick, step 1", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(submit).toBeEnabled();
+
   await page
     .getByRole("button", { name: "Listen to the beat", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Get ready… 1" }),
+    page.getByRole("heading", { name: "Get ready… 3" }),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Stop listening", exact: true })
-    .click();
-  expect(await completedLoops(page, storageKey)).toBe(4);
-  expect((await audioProbe(page)).plays[0].loopCallbacks).toEqual([]);
-  await expect(page.locator(".pad-playing")).toHaveCount(0);
-
-  await startTargetLoop(page);
-  await page.waitForTimeout(250);
-  expect(await completedLoops(page, storageKey)).toBe(4);
-  await expect(loops).toHaveAttribute("aria-valuenow", "5", { timeout: 5_000 });
-  await page
-    .getByRole("button", { name: "Stop listening", exact: true })
-    .click();
-  const beforePause = (await audioProbe(page)).plays[1];
-  expect(beforePause.maxLoops).toBe(2);
-  expect(beforePause.loopCallbacks).toEqual([1]);
-  await page.waitForTimeout(350);
-  expect(await completedLoops(page, storageKey)).toBe(5);
   await expect(page.locator(".pad:disabled")).toHaveCount(48);
-  await expect(
-    page.getByRole("button", { name: "Submit beat", exact: true }),
-  ).toBeDisabled();
-
-  await page.reload();
-  await installAudioProbe(page);
-  await expect(loops).toHaveAttribute("aria-valuenow", "5");
-  await expect(page.locator(".pad:disabled")).toHaveCount(48);
-  await startTargetLoop(page);
-  await expect(loops).toHaveAttribute("aria-valuenow", "6", { timeout: 5_000 });
-  await expect(page.locator(".pad:disabled")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Submit beat", exact: true }),
-  ).toBeEnabled();
-  await expect(
-    page.getByRole("button", { name: "Listen to the beat", exact: true }),
-  ).toBeDisabled();
-  const resumed = (await audioProbe(page)).plays[0];
-  expect(resumed.maxLoops).toBe(1);
-  expect(resumed.loopCallbacks).toEqual([1]);
-  expect(resumed.firstSteps).toBe(1);
-  expect(resumed.complete).toBe(true);
-  expect(await completedLoops(page, storageKey)).toBe(6);
+  expect((await audioProbe(page)).plays[0].maxLoops).toBe(5);
+  await page.keyboard.press("Space");
+  await expect(submit).toBeEnabled();
+  expect(await completedLoops(page, storageKey)).toBe(1);
+  await submit.click();
+  await expect(page.locator(".round-result")).toBeVisible();
+  expect(await completedLoops(page, storageKey)).toBe(1);
   expect(errors).toEqual([]);
 });
 
-test("only added pads sound; Play starts immediately; scoring counts missed required hits and solution replay is unlimited", async ({
+test("added pads sound and live editing and clearing keep Play running without resetting; mistakes include misses and extras", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  const storageKey = await seedDailyRound(page);
+  const storageKey = await seedDailyRound(
+    page,
+    getUTCDateKey(),
+    LISTENING_LOOPS,
+  );
   await page.goto("/");
   await installAudioProbe(page);
   const kick = page.getByRole("button", { name: "Kick, step 1", exact: true });
@@ -102,40 +103,68 @@ test("only added pads sound; Play starts immediately; scoring counts missed requ
   expect((await audioProbe(page)).previews).toEqual(["kick", "snare", "hihat"]);
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Stop", exact: true }),
+    page.getByRole("button", { name: "Pause", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".pad-playing")).toHaveCount(3, { timeout: 1_000 });
   await expect(page.getByRole("button", { name: /Count-in/ })).toHaveCount(0);
   expect((await audioProbe(page)).plays[0].countIn).toBe(false);
-  // Editing a playing answer must stop the old sequence before sounding the new pad.
-  await page.getByRole("button", { name: "Kick, step 4", exact: true }).click();
+  await expect
+    .poll(async () => (await audioProbe(page)).plays[0].steps.length)
+    .toBeGreaterThanOrEqual(3);
+  const stepsBeforeEditing = (await audioProbe(page)).plays[0].steps.length;
+  const livePad = page.getByRole("button", {
+    name: "Kick, step 4",
+    exact: true,
+  });
+  await livePad.click();
+  await livePad.click();
   await expect(
-    page.getByRole("button", { name: "Play", exact: true }),
+    page.getByRole("button", { name: "Pause", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".pad-playing")).toHaveCount(0);
   expect((await audioProbe(page)).previews).toEqual([
     "kick",
     "snare",
     "hihat",
     "kick",
   ]);
-  expect(await completedLoops(page, storageKey)).toBe(6);
   await page.getByRole("button", { name: "Clear grid", exact: true }).click();
   await page
     .getByRole("button", { name: "Click to confirm", exact: true })
     .click();
+  await expect(page.locator(".pad-active")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Pause", exact: true }),
+  ).toBeEnabled();
+  await expect
+    .poll(async () => (await audioProbe(page)).plays[0].steps.length)
+    .toBeGreaterThan(stepsBeforeEditing + 3);
+  const playing = await audioProbe(page);
+  expect(playing.plays).toHaveLength(1);
+  expect(playing.updates.length).toBeGreaterThanOrEqual(3);
+  expect(Object.values(playing.updates.at(-1)!).flat().some(Boolean)).toBe(
+    false,
+  );
+  expect(
+    playing.plays[0].steps.every(
+      (step, index, steps) =>
+        step >= 0 && (index === 0 || step === (steps[index - 1] + 1) % 16),
+    ),
+  ).toBe(true);
+  expect(await completedLoops(page, storageKey)).toBe(6);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
 
   const dateKey = await page.evaluate(() =>
     new Date().toISOString().slice(0, 10),
   );
   const puzzle = getDailyChallenge(dateKey).puzzles[0];
-  const required = TRACKS.flatMap((track) =>
+  const cells = TRACKS.flatMap((track) =>
     puzzle.pattern[track.id].map((hit, step) => ({
       hit,
       label: track.label,
       step,
     })),
-  ).filter((cell) => cell.hit);
+  );
+  const required = cells.filter((cell) => cell.hit);
   for (const cell of required.slice(1)) {
     await page
       .getByRole("button", {
@@ -144,13 +173,7 @@ test("only added pads sound; Play starts immediately; scoring counts missed requ
       })
       .click();
   }
-  const extra = TRACKS.flatMap((track) =>
-    puzzle.pattern[track.id].map((hit, step) => ({
-      hit,
-      label: track.label,
-      step,
-    })),
-  ).find((cell) => !cell.hit)!;
+  const extra = cells.find((cell) => !cell.hit)!;
   await page
     .getByRole("button", {
       name: `${extra.label}, step ${extra.step + 1}`,
@@ -159,14 +182,14 @@ test("only added pads sound; Play starts immediately; scoring counts missed requ
     .click();
   await page.getByRole("button", { name: "Submit beat", exact: true }).click();
   await expect(page.locator(".round-result")).toContainText(
-    `${Math.round(100 - 100 / required.length)}%`,
+    `${Math.round(100 - 200 / required.length)}%`,
   );
   await expect(page.locator(".pad-mismatch")).toHaveCount(2);
   await page
     .getByRole("button", { name: "Play the solution", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Get ready… 1" }),
+    page.getByRole("heading", { name: "Get ready… 3" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Find the groove.", exact: true }),

@@ -1,10 +1,11 @@
 import * as Tone from "tone";
-import type { RhythmPattern, TrackId } from "../lib/types";
+import { validatePattern } from "../lib/puzzles";
+import { clonePattern, type RhythmPattern, type TrackId } from "../lib/types";
 
 export interface PlaybackOptions {
   /** The current sixteenth note, or -1 when playback has stopped. */
   onStep?: (step: number) => void;
-  /** Beats 1–4 during the count-in; null when the loop starts or stops. */
+  /** Countdown ticks 3, 2, 1; null when the loop starts or stops. */
   onCountIn?: (beat: number | null) => void;
   /** Fired after each complete 16-step loop, using a one-based loop count. */
   onLoopComplete?: (completedLoops: number) => void;
@@ -12,12 +13,13 @@ export interface PlaybackOptions {
   onComplete?: () => void;
   /** Whole loops after the count-in. Omit for unlimited playback. */
   maxLoops?: number;
-  /** Include the four-beat count-in. Defaults to true. */
+  /** Include the three-tick count-in. Defaults to true. */
   countIn?: boolean;
 }
 
 const TRACKS: TrackId[] = ["kick", "snare", "hihat"];
 const STEPS = 16;
+const COUNT_IN_BEATS = 3;
 
 /**
  * One owner for Tone's transport and the drum voices. Instantiate once per app.
@@ -35,6 +37,7 @@ export class BeatleAudioEngine {
   private disposed = false;
   private running = false;
   private options?: PlaybackOptions;
+  private activePattern?: RhythmPattern;
   private lastTrigger: Partial<Record<TrackId, number>> = {};
 
   async init(): Promise<void> {
@@ -108,37 +111,39 @@ export class BeatleAudioEngine {
   ): Promise<void> {
     if (!Number.isFinite(bpm) || bpm <= 0)
       throw new Error("BPM must be positive.");
-    if (TRACKS.some((track) => pattern[track]?.length !== STEPS)) {
-      throw new Error("Every drum track must contain exactly 16 steps.");
-    }
+    validatePattern(pattern);
     if (
       options.maxLoops !== undefined &&
       (!Number.isSafeInteger(options.maxLoops) || options.maxLoops <= 0)
     ) {
       throw new Error("The loop count must be a positive integer.");
     }
+    // Snapshot before audio initialization so caller mutations cannot leak in.
+    const snapshot = clonePattern(pattern);
 
     // Invalidate pending play() calls before waiting for AudioContext startup.
     const generation = ++this.generation;
     this.stopPlayback();
+    this.activePattern = snapshot;
     await this.init();
     if (generation !== this.generation || this.disposed) return;
 
-    // A player's edits must not change a loop that has already been scheduled.
-    const snapshot = Object.fromEntries(
-      TRACKS.map((track) => [track, [...pattern[track]]]),
-    ) as RhythmPattern;
     const transport = Tone.getTransport();
     const draw = Tone.getDraw();
     const secondsPerBeat = 60 / bpm;
     const loopSeconds = secondsPerBeat * 4;
-    const countInSeconds = options.countIn === false ? 0 : loopSeconds;
+    const countInSeconds =
+      options.countIn === false ? 0 : secondsPerBeat * COUNT_IN_BEATS;
     this.options = options;
     this.running = true;
     transport.bpm.value = bpm;
     transport.seconds = 0;
 
-    for (let beat = 0; beat < (options.countIn === false ? 0 : 4); beat += 1) {
+    for (
+      let beat = 0;
+      beat < (options.countIn === false ? 0 : COUNT_IN_BEATS);
+      beat += 1
+    ) {
       this.events.push(
         transport.scheduleOnce((time) => {
           if (generation !== this.generation) return;
@@ -148,7 +153,8 @@ export class BeatleAudioEngine {
             time,
           );
           draw.schedule(() => {
-            if (generation === this.generation) options.onCountIn?.(beat + 1);
+            if (generation === this.generation)
+              options.onCountIn?.(COUNT_IN_BEATS - beat);
           }, time);
         }, beat * secondsPerBeat),
       );
@@ -169,7 +175,8 @@ export class BeatleAudioEngine {
             return;
           const currentStep = scheduledSteps % STEPS;
           for (const track of TRACKS) {
-            if (snapshot[track][currentStep])
+            // Edits affect the next unscheduled notes without resetting phase.
+            if (this.activePattern?.[track][currentStep])
               this.trigger(track, time, currentStep % 4 === 0 ? 1 : 0.85);
           }
           draw.schedule(() => {
@@ -224,6 +231,13 @@ export class BeatleAudioEngine {
     this.stopPlayback();
   }
 
+  /** Update the playing loop in place; the transport and playhead keep running. */
+  updatePattern(pattern: RhythmPattern): void {
+    if (this.disposed) throw new Error("This audio engine has been disposed.");
+    validatePattern(pattern);
+    this.activePattern = clonePattern(pattern);
+  }
+
   async preview(track: TrackId): Promise<void> {
     const generation = this.generation;
     await this.init();
@@ -276,6 +290,7 @@ export class BeatleAudioEngine {
       this.click?.triggerRelease(now);
     }
     this.running = false;
+    this.activePattern = undefined;
     this.options?.onStep?.(-1);
     this.options?.onCountIn?.(null);
     this.options = undefined;

@@ -4,7 +4,28 @@ import {
   getDailyStorageKey,
   getUTCDateKey,
 } from "../src/lib/daily";
-import { LISTENING_LOOPS, type Puzzle, TRACKS } from "../src/lib/types";
+import {
+  MIN_LISTENING_LOOPS,
+  type Puzzle,
+  type RhythmPattern,
+  TRACKS,
+} from "../src/lib/types";
+
+export interface PlaybackProbe {
+  maxLoops?: number;
+  countIn?: boolean;
+  countIns: (number | null)[];
+  loopCallbacks: number[];
+  steps: number[];
+  firstSteps: number;
+  complete: boolean;
+}
+
+export interface AudioProbe {
+  previews: string[];
+  updates: RhythmPattern[];
+  plays: PlaybackProbe[];
+}
 
 const audioEngineRequests = new WeakMap<Page, string>();
 const watchedPages = new WeakSet<Page>();
@@ -41,7 +62,7 @@ async function loadedAudioEngineUrl(page: Page): Promise<string> {
 export async function seedDailyRound(
   page: Page,
   dateKey = getUTCDateKey(),
-  completedLoops = LISTENING_LOOPS,
+  completedLoops = MIN_LISTENING_LOOPS,
 ) {
   watchAudioEngineRequests(page);
   const progress = createDailyProgress(dateKey);
@@ -67,7 +88,7 @@ export async function unlockCurrentDailyRound(page: Page, dateKey: string) {
       current.completedLoops = loops;
       localStorage.setItem(key, JSON.stringify(progress));
     },
-    { key: getDailyStorageKey(dateKey), loops: LISTENING_LOOPS },
+    { key: getDailyStorageKey(dateKey), loops: MIN_LISTENING_LOOPS },
   );
   await page.reload();
 }
@@ -99,7 +120,7 @@ export async function startTargetLoop(page: Page) {
     .getByRole("button", { name: "Listen to the beat", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Get ready… 1" }),
+    page.getByRole("heading", { name: "Get ready… 3" }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Find the groove.", exact: true }),
@@ -112,29 +133,29 @@ export async function installAudioProbe(page: Page) {
   const modulePath = await loadedAudioEngineUrl(page);
   await page.evaluate(async (modulePath) => {
     const { BeatleAudioEngine } = await import(/* @vite-ignore */ modulePath);
-    const probe = {
-      previews: [] as string[],
-      plays: [] as {
-        maxLoops?: number;
-        countIn?: boolean;
-        loopCallbacks: number[];
-        firstSteps: number;
-        complete: boolean;
-      }[],
-    };
+    const probe: AudioProbe = { previews: [], updates: [], plays: [] };
     (window as unknown as { beatleAudioProbe: typeof probe }).beatleAudioProbe =
       probe;
     const originalPlay = BeatleAudioEngine.prototype.play;
     const originalPreview = BeatleAudioEngine.prototype.preview;
+    const originalUpdate = BeatleAudioEngine.prototype.updatePattern;
+    BeatleAudioEngine.prototype.updatePattern = function (
+      pattern: RhythmPattern,
+    ) {
+      probe.updates.push(structuredClone(pattern));
+      return originalUpdate.call(this, pattern);
+    };
     BeatleAudioEngine.prototype.play = function (
       pattern: unknown,
       bpm: number,
       options: Record<string, any> = {},
     ) {
-      const play = {
+      const play: PlaybackProbe = {
         maxLoops: options.maxLoops,
         countIn: options.countIn,
-        loopCallbacks: [] as number[],
+        countIns: [],
+        loopCallbacks: [],
+        steps: [],
         firstSteps: 0,
         complete: false,
       };
@@ -142,8 +163,13 @@ export async function installAudioProbe(page: Page) {
       return originalPlay.call(this, pattern, bpm, {
         ...options,
         onStep: (step: number) => {
+          play.steps.push(step);
           if (step === 0) play.firstSteps += 1;
           options.onStep?.(step);
+        },
+        onCountIn: (beat: number | null) => {
+          play.countIns.push(beat);
+          options.onCountIn?.(beat);
         },
         onLoopComplete: (loop: number) => {
           play.loopCallbacks.push(loop);
@@ -162,23 +188,10 @@ export async function installAudioProbe(page: Page) {
   }, modulePath);
 }
 
-export async function audioProbe(page: Page) {
+export async function audioProbe(page: Page): Promise<AudioProbe> {
   return page.evaluate(
     () =>
-      (
-        window as unknown as {
-          beatleAudioProbe: {
-            previews: string[];
-            plays: {
-              maxLoops?: number;
-              countIn?: boolean;
-              loopCallbacks: number[];
-              firstSteps: number;
-              complete: boolean;
-            }[];
-          };
-        }
-      ).beatleAudioProbe,
+      (window as unknown as { beatleAudioProbe: AudioProbe }).beatleAudioProbe,
   );
 }
 

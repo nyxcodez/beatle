@@ -13,6 +13,7 @@ import {
   Headphones,
   LockKeyhole,
   LoaderCircle,
+  Pause,
   Play,
   RotateCcw,
   Square,
@@ -24,6 +25,7 @@ import { getScoreDetails } from "../lib/scoring";
 import {
   createEmptyPattern,
   LISTENING_LOOPS,
+  MIN_LISTENING_LOOPS,
   STEP_COUNT,
   TRACKS,
   type Puzzle,
@@ -69,6 +71,7 @@ export default function RoundBoard({
   const requestRef = useRef(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
+  const shortcutRef = useRef<() => void>(() => {});
   const [playback, setPlayback] = useState<Playback>(null);
   const [countIn, setCountIn] = useState<number | null>(null);
   const [currentStep, setCurrentStep] = useState(-1);
@@ -130,6 +133,33 @@ export default function RoundBoard({
     if (progress.submitted) resultRef.current?.focus({ preventScroll: true });
   }, [progress.submitted]);
 
+  useEffect(() => {
+    function onSpace(event: globalThis.KeyboardEvent) {
+      if (event.code !== "Space" && event.key !== " ") return;
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.isComposing
+      )
+        return;
+      const target = event.target;
+      if (
+        document.querySelector("dialog[open]") ||
+        (target instanceof Element &&
+          target.closest(
+            "input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox'], dialog",
+          ))
+      )
+        return;
+      event.preventDefault();
+      if (!event.repeat) shortcutRef.current();
+    }
+    document.addEventListener("keydown", onSpace);
+    return () => document.removeEventListener("keydown", onSpace);
+  }, []);
+
   async function play(mode: Exclude<Playback, null>) {
     if (playbackRef.current === mode) {
       stopPlayback();
@@ -140,7 +170,7 @@ export default function RoundBoard({
     const remaining = LISTENING_LOOPS - startingLoops;
     if (mode === "target" && !progressRef.current.submitted && remaining <= 0)
       return;
-    if (mode === "answer" && startingLoops < LISTENING_LOOPS) return;
+    if (mode === "answer" && startingLoops < MIN_LISTENING_LOOPS) return;
     const request = ++requestRef.current;
     setLoading(true);
     setAudioError("");
@@ -189,7 +219,7 @@ export default function RoundBoard({
   }
 
   async function previewInstrument(track: TrackId) {
-    if (playbackRef.current) return;
+    if (playbackRef.current === "target") return;
     try {
       await engineRef.current?.preview(track);
       setAudioError("");
@@ -203,10 +233,10 @@ export default function RoundBoard({
   function toggleCell(track: TrackId, step: number) {
     if (
       progressRef.current.submitted ||
-      progressRef.current.completedLoops < LISTENING_LOOPS
+      progressRef.current.completedLoops < MIN_LISTENING_LOOPS ||
+      playbackRef.current === "target"
     )
       return;
-    if (playbackRef.current === "answer") stopPlayback();
     const nextPattern = {
       ...progressRef.current.pattern,
       [track]: [...progressRef.current.pattern[track]],
@@ -215,6 +245,8 @@ export default function RoundBoard({
     const next = { ...progressRef.current, pattern: nextPattern };
     progressRef.current = next;
     onChangeRef.current(next);
+    if (playbackRef.current === "answer")
+      engineRef.current?.updatePattern(nextPattern);
     if (nextPattern[track][step]) void previewInstrument(track);
     setClearConfirmation(false);
   }
@@ -266,7 +298,8 @@ export default function RoundBoard({
   function submit() {
     if (
       progressRef.current.submitted ||
-      progressRef.current.completedLoops < LISTENING_LOOPS
+      progressRef.current.completedLoops < MIN_LISTENING_LOOPS ||
+      playbackRef.current === "target"
     )
       return;
     stopPlayback();
@@ -277,7 +310,9 @@ export default function RoundBoard({
   }
 
   const listeningComplete = progress.completedLoops >= LISTENING_LOOPS;
-  const gridLocked = !listeningComplete;
+  const hasListened = progress.completedLoops >= MIN_LISTENING_LOOPS;
+  const gridLocked =
+    !hasListened || (!progress.submitted && playback === "target");
   const details = progress.submitted
     ? getScoreDetails(progress.pattern, puzzle.pattern)
     : null;
@@ -286,6 +321,23 @@ export default function RoundBoard({
       ? puzzle.pattern
       : progress.pattern;
   const hasNotes = TRACKS.some(({ id }) => progress.pattern[id].some(Boolean));
+
+  shortcutRef.current = () => {
+    if (suspendPlayback) return;
+    if (playbackRef.current) {
+      stopPlayback();
+    } else if (
+      progressRef.current.completedLoops >= MIN_LISTENING_LOOPS &&
+      TRACKS.some(({ id }) => progressRef.current.pattern[id].some(Boolean))
+    ) {
+      void play("answer");
+    } else if (
+      progressRef.current.submitted ||
+      progressRef.current.completedLoops < LISTENING_LOOPS
+    ) {
+      void play("target");
+    }
+  };
 
   return (
     <section className="round-board" aria-label={`Round ${roundNumber}`}>
@@ -352,8 +404,10 @@ export default function RoundBoard({
               : listeningComplete
                 ? "Six loops heard. The grid is yours—take your time."
                 : playback === "target" && countIn === null && !loading
-                  ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. Just listen for now.`
-                  : "Hear the loop six times, then recreate it from memory."}
+                  ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. ${hasListened ? "Pause when you’re ready." : "Listen for one full loop."}`
+                  : hasListened
+                    ? "Ready when you are. Replay the remaining loops or make your beat."
+                    : "Up to six loops. Pause after one full loop when you’re ready."}
           </p>
         </div>
         <div
@@ -449,22 +503,24 @@ export default function RoundBoard({
       <div className="sequence-playback">
         <button
           className={`secondary-button ${playback === "answer" ? "button-playing" : ""}`}
-          disabled={gridLocked || !hasNotes}
+          disabled={gridLocked || (!hasNotes && playback !== "answer")}
           onClick={() => void play("answer")}
         >
           {playback === "answer" ? (
-            <Square size={14} fill="currentColor" />
+            <Pause size={14} fill="currentColor" />
           ) : (
             <Play size={15} fill="currentColor" />
           )}
-          {playback === "answer" ? "Stop" : "Play"}
+          {playback === "answer" ? "Pause" : "Play"}
         </button>
         {!progress.submitted && (
           <p className="sequence-phase-note" role="status">
             {gridLocked ? (
               <>
                 <LockKeyhole size={13} />
-                Listen to all six loops to unlock the grid.
+                {hasListened
+                  ? "Pause the reference to start your beat."
+                  : "Hear one full loop, then pause to unlock the grid."}
               </>
             ) : (
               <>
@@ -474,6 +530,9 @@ export default function RoundBoard({
             )}
           </p>
         )}
+        <span className="keyboard-shortcut">
+          <kbd>space</kbd> play / pause
+        </span>
       </div>
 
       <div
@@ -489,7 +548,7 @@ export default function RoundBoard({
           aria-label={
             progress.submitted
               ? `${resultView === "solution" ? "Correct solution" : "Your submitted rhythm"}`
-              : "Your rhythm. Use arrow keys to move and Space to toggle a hit."
+              : "Your rhythm. Use arrow keys to move, Enter to toggle a hit, and Space to play or pause."
           }
         >
           <div className="step-labels sequence-row" aria-hidden="true">
@@ -584,8 +643,8 @@ export default function RoundBoard({
                 <span className="hint-square" />
               )}
               {gridLocked
-                ? "Listen first. Your grid will unlock automatically."
-                : "Add a hit to hear it. Click again to remove it."}
+                ? "Pause after one full loop, or hear all six."
+                : "Tap to add a sound. Enter toggles a pad; Space plays or pauses."}
             </>
           )}
         </p>
@@ -595,11 +654,15 @@ export default function RoundBoard({
             disabled={gridLocked || !hasNotes}
             onClick={() => {
               if (clearConfirmation) {
-                stopPlayback();
-                onChange({
+                const pattern = createEmptyPattern();
+                const next = {
                   ...progressRef.current,
-                  pattern: createEmptyPattern(),
-                });
+                  pattern,
+                };
+                progressRef.current = next;
+                onChangeRef.current(next);
+                if (playbackRef.current === "answer")
+                  engineRef.current?.updatePattern(pattern);
                 setClearConfirmation(false);
               } else {
                 setClearConfirmation(true);
@@ -643,8 +706,8 @@ export default function RoundBoard({
               <h3>
                 <strong>{details.accuracy}%</strong> accuracy{" "}
                 <span>
-                  · {details.matchedHits} of {details.requiredHits} required
-                  hits found
+                  · {details.matchedHits} of {details.requiredHits} hits found ·{" "}
+                  {details.extraHits} extra
                 </span>
               </h3>
             </div>
@@ -684,8 +747,8 @@ export default function RoundBoard({
       {progress.submitted && (
         <div className="post-result-actions">
           <span>
-            Score = 100 − (100 ÷ required hits) × missed hits. Extra hits don’t
-            reduce your score.
+            Score = 100 − (100 ÷ required hits) × (missed + extra hits), with a
+            minimum of 0.
           </span>
         </div>
       )}

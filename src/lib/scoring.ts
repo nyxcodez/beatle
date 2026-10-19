@@ -4,11 +4,13 @@ import { STEP_COUNT, TRACKS, type RhythmPattern } from "./types";
 export interface ScoreDetails {
   requiredHits: number;
   missedHits: number;
+  extraHits: number;
+  mistakeCount: number;
   matchedHits: number;
   accuracy: number;
 }
 
-/** Score required hits using 100 - (100 / requiredHits) * missedHits. */
+/** Missing and extra hits each cost 100 / requiredHits, with a minimum score of zero. */
 export function getScoreDetails(
   answer: RhythmPattern,
   solution: RhythmPattern,
@@ -17,23 +19,31 @@ export function getScoreDetails(
   validatePattern(solution);
   let requiredHits = 0;
   let missedHits = 0;
+  let extraHits = 0;
   for (const { id } of TRACKS) {
     for (let step = 0; step < STEP_COUNT; step += 1) {
       if (solution[id][step]) {
         requiredHits += 1;
         if (!answer[id][step]) missedHits += 1;
+      } else if (answer[id][step]) {
+        extraHits += 1;
       }
     }
   }
+  const mistakeCount = missedHits + extraHits;
   return {
     requiredHits,
     missedHits,
+    extraHits,
+    mistakeCount,
     matchedHits: requiredHits - missedHits,
-    // With no required hits, there are no misses to penalize.
+    // Silence matches only silence when there are no required hits.
     accuracy:
       requiredHits === 0
-        ? 100
-        : Math.max(0, Math.round(100 - (100 / requiredHits) * missedHits)),
+        ? extraHits === 0
+          ? 100
+          : 0
+        : Math.max(0, Math.round(100 - (100 / requiredHits) * mistakeCount)),
   };
 }
 

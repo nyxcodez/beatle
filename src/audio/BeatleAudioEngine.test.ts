@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BeatleAudioEngine } from "./BeatleAudioEngine";
-import type { RhythmPattern } from "../lib/types";
+import { createEmptyPattern, type RhythmPattern } from "../lib/types";
 
 const tone = vi.hoisted(() => {
   type Event = {
@@ -35,7 +35,11 @@ const tone = vi.hoisted(() => {
     start: vi.fn(),
     stop: vi.fn(),
   };
+  const nodes: AudioNode[] = [];
   class AudioNode {
+    constructor() {
+      nodes.push(this);
+    }
     connect() {
       return this;
     }
@@ -48,6 +52,7 @@ const tone = vi.hoisted(() => {
   }
   return {
     AudioNode,
+    nodes,
     transport,
     events,
     start: vi.fn(async () => {}),
@@ -78,6 +83,7 @@ const pattern: RhythmPattern = {
 beforeEach(() => {
   vi.clearAllMocks();
   tone.events.clear();
+  tone.nodes.length = 0;
   tone.start.mockResolvedValue();
 });
 
@@ -149,12 +155,126 @@ describe("BeatleAudioEngine", () => {
     expect(countIn).toHaveBeenCalledWith(null);
 
     await engine.play(pattern, 120);
-    expect(tone.transport.scheduleOnce).toHaveBeenCalledTimes(4);
+    expect(tone.transport.scheduleOnce).toHaveBeenCalledTimes(3);
     const targetStep = [...tone.events.values()].find(
       (event) => event.interval === "16n",
     )!;
-    expect(targetStep.start).toBe(2);
+    expect(targetStep.start).toBe(1.5);
   });
+
+  it("plays exactly three audible countdown ticks and starts after three beats", async () => {
+    const engine = new BeatleAudioEngine();
+    const countdown: Array<number | null> = [];
+    await engine.play(pattern, 120, {
+      maxLoops: 6,
+      onCountIn: (beat) => countdown.push(beat),
+    });
+    const ticks = [...tone.events.values()].filter((event) => !event.interval);
+    const stepEvent = [...tone.events.values()].find(
+      (event) => event.interval === "16n",
+    )!;
+    const loopEvent = [...tone.events.values()].find(
+      (event) => event.interval === "1m",
+    )!;
+    expect(ticks.map((tick) => tick.start)).toEqual([0, 0.5, 1]);
+    for (const tick of ticks) tick.callback(tick.start);
+    expect(countdown).toEqual([3, 2, 1]);
+    const clicks = tone.nodes.flatMap(
+      (node) => node.triggerAttackRelease.mock.calls,
+    );
+    expect(clicks).toEqual([
+      [1_000, 0.025, 0],
+      [800, 0.025, 0.5],
+      [800, 0.025, 1],
+    ]);
+    expect(stepEvent.start).toBe(1.5);
+    expect(stepEvent.duration).toBe(12);
+    // A full loop still lasts four beats after the shorter count-in.
+    expect(loopEvent.start).toBe(3.5);
+    stepEvent.callback(1.5);
+    expect(countdown).toEqual([3, 2, 1, null]);
+  });
+
+  it("updates future notes in place without stopping, rescheduling, or resetting phase", async () => {
+    const engine = new BeatleAudioEngine();
+    const original = createEmptyPattern();
+    original.kick[0] = true;
+    const steps: number[] = [];
+    await engine.play(original, 120, {
+      countIn: false,
+      onStep: (step) => steps.push(step),
+    });
+    const stepEvent = [...tone.events.values()].find(
+      (event) => event.interval === "16n",
+    )!;
+    original.kick[0] = false;
+    stepEvent.callback(1);
+    const kick = tone.nodes.find(
+      (node) => node.triggerAttackRelease.mock.calls[0]?.[0] === "C1",
+    )!;
+    const changed = createEmptyPattern();
+    changed.snare[2] = true;
+    changed.kick[3] = true;
+    const eventIds = [...tone.events.keys()];
+    tone.transport.seconds = 0.625;
+    engine.updatePattern(changed);
+    // Neither the original play input nor an update's arrays stay aliased.
+    changed.snare[2] = false;
+    changed.kick[3] = false;
+    expect(tone.transport.seconds).toBe(0.625);
+    expect(tone.transport.start).toHaveBeenCalledOnce();
+    expect(tone.transport.stop).not.toHaveBeenCalled();
+    expect(tone.transport.clear).not.toHaveBeenCalled();
+    expect([...tone.events.keys()]).toEqual(eventIds);
+    expect(tone.transport.scheduleRepeat).toHaveBeenCalledOnce();
+    stepEvent.callback(1.125);
+    stepEvent.callback(1.25);
+    stepEvent.callback(1.375);
+    expect(steps).toEqual([0, 1, 2, 3]);
+    expect(kick.triggerAttackRelease.mock.calls.map((call) => call[2])).toEqual(
+      [1, 1.375],
+    );
+    const snare = tone.nodes.find(
+      (node) => node.triggerAttackRelease.mock.calls[0]?.[0] === 0.06,
+    )!;
+    expect(snare.triggerAttackRelease).toHaveBeenCalledExactlyOnceWith(
+      0.06,
+      1.25,
+      0.85,
+    );
+
+    engine.updatePattern(createEmptyPattern());
+    for (let step = 4; step < 20; step += 1) stepEvent.callback(1 + step / 8);
+    expect(kick.triggerAttackRelease).toHaveBeenCalledTimes(2);
+    expect(snare.triggerAttackRelease).toHaveBeenCalledOnce();
+    expect(steps.slice(-4)).toEqual([0, 1, 2, 3]);
+    expect(tone.transport.stop).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null,
+    {},
+    { ...pattern, kick: Array<boolean>(15).fill(false) },
+    { ...pattern, snare: Array(16).fill(1) },
+    { ...pattern, hihat: Array(16) },
+  ])(
+    "rejects malformed live pattern updates without altering playback",
+    async (invalid) => {
+      const engine = new BeatleAudioEngine();
+      await engine.play(pattern, 120, { countIn: false });
+      expect(() =>
+        engine.updatePattern(invalid as unknown as RhythmPattern),
+      ).toThrow();
+      expect(tone.transport.stop).not.toHaveBeenCalled();
+      const stepEvent = [...tone.events.values()].find(
+        (event) => event.interval === "16n",
+      )!;
+      stepEvent.callback(1);
+      expect(
+        tone.nodes.flatMap((node) => node.triggerAttackRelease.mock.calls),
+      ).toEqual([["C1", 0.08, 1, 1]]);
+    },
+  );
 
   it("does not complete a partially played loop when stopped", async () => {
     const engine = new BeatleAudioEngine();

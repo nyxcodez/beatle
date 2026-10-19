@@ -298,7 +298,7 @@ export default function App() {
             </span>
             <p>
               <strong>Listen in.</strong>
-              <span>Six loops to catch the groove.</span>
+              <span>Up to six loops. One to find your feet.</span>
             </p>
           </div>
           <div>

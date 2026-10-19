@@ -11,7 +11,12 @@ import {
   saveDailyProgress,
 } from "./daily";
 import { PUZZLES } from "./puzzles";
-import { clonePattern, LISTENING_LOOPS } from "./types";
+import {
+  clonePattern,
+  LISTENING_LOOPS,
+  MIN_LISTENING_LOOPS,
+  TRACKS,
+} from "./types";
 
 const DATE_KEY = "2026-10-18";
 
@@ -105,7 +110,22 @@ describe("daily progress persistence", () => {
     );
   });
 
-  it("restores completed listening loops without unlocking an unfinished listen", () => {
+  it("allows saving edits and submissions after just one complete loop", () => {
+    const storage = memoryStorage();
+    const progress = createDailyProgress(DATE_KEY);
+    progress.rounds[0].completedLoops = MIN_LISTENING_LOOPS;
+    progress.rounds[0].pattern.kick[0] = true;
+    expect(saveDailyProgress(progress, storage)).toBe(true);
+    expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(progress);
+    progress.rounds[0].submitted = true;
+    expect(saveDailyProgress(progress, storage)).toBe(true);
+    expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(progress);
+    expect(getActiveRound(loadDailyProgress(DATE_KEY, storage).progress)).toBe(
+      1,
+    );
+  });
+
+  it("restores partially completed listening in the existing v2 storage record", () => {
     const storage = memoryStorage();
     const progress = createDailyProgress(DATE_KEY);
     progress.rounds[0].completedLoops = 3;
@@ -186,11 +206,11 @@ describe("daily progress persistence", () => {
       },
       (progress: ReturnType<typeof createDailyProgress>) => {
         progress.rounds[0].pattern.kick[0] = true;
-        progress.rounds[0].completedLoops = LISTENING_LOOPS - 1;
+        progress.rounds[0].completedLoops = MIN_LISTENING_LOOPS - 1;
       },
       (progress: ReturnType<typeof createDailyProgress>) => {
         progress.rounds[0].submitted = true;
-        progress.rounds[0].completedLoops = LISTENING_LOOPS - 1;
+        progress.rounds[0].completedLoops = MIN_LISTENING_LOOPS - 1;
       },
       (progress: ReturnType<typeof createDailyProgress>) => {
         progress.rounds[0].pattern.kick = [true];
@@ -272,6 +292,32 @@ describe("daily totals and unlimited practice", () => {
       expect(getActiveRound(progress)).toBe(round + 1);
     }
     expect(() => getTotalScore(progress, puzzles.slice(0, 2))).toThrow();
+  });
+
+  it("derives saved daily totals from both missed and extra hits", () => {
+    const storage = memoryStorage();
+    const progress = createDailyProgress(DATE_KEY);
+    const { puzzles } = getDailyChallenge(DATE_KEY);
+    const solution = puzzles[0].pattern;
+    const answer = clonePattern(solution);
+    const cells = TRACKS.flatMap(({ id }) =>
+      solution[id].map((hit, step) => ({ id, step, hit })),
+    );
+    const missed = cells.find(({ hit }) => hit)!;
+    const extra = cells.find(({ hit }) => !hit)!;
+    answer[missed.id][missed.step] = false;
+    answer[extra.id][extra.step] = true;
+    progress.rounds[0] = {
+      pattern: answer,
+      completedLoops: MIN_LISTENING_LOOPS,
+      submitted: true,
+    };
+    expect(saveDailyProgress(progress, storage)).toBe(true);
+    const loaded = loadDailyProgress(DATE_KEY, storage).progress;
+    const requiredHits = cells.filter(({ hit }) => hit).length;
+    expect(getTotalScore(loaded, puzzles)).toBe(
+      Math.round(100 - (100 / requiredHits) * 2),
+    );
   });
 
   it("offers repeated practice without changing daily progress or immediately repeating a puzzle", () => {
