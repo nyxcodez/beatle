@@ -45,7 +45,8 @@ interface Props {
   suspendPlayback?: boolean;
 }
 
-type Playback = "target" | "answer" | null;
+type SequencePlayback = "answer" | "original";
+type Playback = "target" | SequencePlayback | null;
 
 const WAVE_HEIGHTS = [
   12, 21, 30, 18, 35, 46, 27, 16, 24, 40, 51, 31, 19, 28, 43, 34, 17, 25, 38,
@@ -71,7 +72,8 @@ export default function RoundBoard({
   const requestRef = useRef(0);
   const gridRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
-  const shortcutRef = useRef<() => void>(() => {});
+  const shortcutRef = useRef<(mode?: SequencePlayback) => void>(() => {});
+  const lastSequenceMode = useRef<SequencePlayback>("answer");
   const [playback, setPlayback] = useState<Playback>(null);
   const [countIn, setCountIn] = useState<number | null>(null);
   const [currentStep, setCurrentStep] = useState(-1);
@@ -175,7 +177,20 @@ export default function RoundBoard({
       )
         return;
       event.preventDefault();
-      if (!event.repeat) shortcutRef.current();
+      if (!event.repeat) {
+        const control =
+          target instanceof Element
+            ? target.closest<HTMLButtonElement>("button[data-playback]")
+            : null;
+        const mode = control?.dataset.playback;
+        shortcutRef.current(
+          control?.disabled
+            ? undefined
+            : mode === "answer" || mode === "original"
+              ? mode
+              : undefined,
+        );
+      }
     }
     document.addEventListener("keydown", onSpace);
     return () => document.removeEventListener("keydown", onSpace);
@@ -192,6 +207,8 @@ export default function RoundBoard({
     )
       return;
     if (mode === "answer" && !progressRef.current.referenceEnded) return;
+    if (mode === "original" && !progressRef.current.submitted) return;
+    if (mode !== "target") lastSequenceMode.current = mode;
     stopPlayback();
     const startingLoops = progressRef.current.completedLoops;
     const remaining = LISTENING_LOOPS - startingLoops;
@@ -203,7 +220,7 @@ export default function RoundBoard({
     setPlayback(mode);
     try {
       await engineRef.current?.play(
-        mode === "target" ? puzzle.pattern : progressRef.current.pattern,
+        mode === "answer" ? progressRef.current.pattern : puzzle.pattern,
         puzzle.bpm,
         {
           countIn: mode === "target",
@@ -222,7 +239,7 @@ export default function RoundBoard({
           },
           onComplete: () => {
             if (request !== requestRef.current) return;
-            updateCompletedLoops(LISTENING_LOOPS);
+            if (mode === "target") updateCompletedLoops(LISTENING_LOOPS);
             playbackRef.current = null;
             setPlayback(null);
             setCountIn(null);
@@ -344,15 +361,24 @@ export default function RoundBoard({
       : progress.pattern;
   const hasNotes = TRACKS.some(({ id }) => progress.pattern[id].some(Boolean));
 
-  shortcutRef.current = () => {
+  shortcutRef.current = (requestedMode) => {
     if (suspendPlayback) return;
-    if (playbackRef.current) {
+    if (requestedMode) {
+      void play(requestedMode);
+    } else if (playbackRef.current) {
       pausePlayback();
+    } else if (
+      progressRef.current.submitted &&
+      lastSequenceMode.current === "original"
+    ) {
+      void play("original");
     } else if (
       progressRef.current.referenceEnded &&
       TRACKS.some(({ id }) => progressRef.current.pattern[id].some(Boolean))
     ) {
       void play("answer");
+    } else if (progressRef.current.submitted) {
+      void play("original");
     } else if (
       !progressRef.current.referenceEnded &&
       !progressRef.current.submitted
@@ -392,7 +418,7 @@ export default function RoundBoard({
       </div>
 
       <div
-        className={`listen-panel ${playback === "target" ? "is-playing" : ""}`}
+        className={`listen-panel ${playback === "target" || playback === "original" ? "is-playing" : ""}`}
       >
         <button
           className="listen-button"
@@ -400,7 +426,9 @@ export default function RoundBoard({
           disabled={referenceEnded || pauseLocked}
           title={
             referenceEnded
-              ? "The original beat cannot be replayed."
+              ? progress.submitted
+                ? "Use Play original below to compare the solution."
+                : "The original beat cannot be replayed until you submit."
               : pauseLocked
                 ? "Listen to one complete loop before pausing."
                 : "One listening session. Stopping ends it permanently."
@@ -423,20 +451,24 @@ export default function RoundBoard({
               ? `Get ready… ${countIn}`
               : playback === "target"
                 ? "Find the groove."
-                : referenceEnded
-                  ? "Now, trust your ears."
-                  : "First, catch the beat."}
+                : playback === "original"
+                  ? "The original beat"
+                  : referenceEnded
+                    ? "Now, trust your ears."
+                    : "First, catch the beat."}
           </h3>
           <p>
-            {referenceEnded
-              ? "Listening is finished. The original beat cannot be replayed."
-              : playback === "target" && countIn === null && !loading
-                ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. ${pauseLocked ? "Pausing unlocks after this loop finishes." : "Stop when you’re ready—there’s no replay."}`
-                : "One chance to listen. Hear at least one full loop before pausing."}
+            {progress.submitted
+              ? "Compare your beat with the original using the controls below."
+              : referenceEnded
+                ? "Listening is finished. The original beat cannot be replayed."
+                : playback === "target" && countIn === null && !loading
+                  ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. ${pauseLocked ? "Pausing unlocks after this loop finishes." : "Stop when you’re ready—there’s no replay."}`
+                  : "One chance to listen. Hear at least one full loop before pausing."}
           </p>
         </div>
         <div
-          className={`waveform ${playback === "target" && countIn === null ? "waveform-active" : ""}`}
+          className={`waveform ${(playback === "target" || playback === "original") && countIn === null ? "waveform-active" : ""}`}
           aria-hidden="true"
         >
           {WAVE_HEIGHTS.map((height, i) => (
@@ -459,7 +491,7 @@ export default function RoundBoard({
         <div className="listening-clock">
           {progress.submitted ? (
             <span className="unlimited-label">
-              <Headphones size={15} /> LISTENING FINISHED
+              <Headphones size={15} /> COMPARE THE BEATS
             </span>
           ) : (
             <>
@@ -528,6 +560,8 @@ export default function RoundBoard({
       <div className="sequence-playback">
         <button
           className={`secondary-button ${playback === "answer" ? "button-playing" : ""}`}
+          data-playback="answer"
+          aria-pressed={playback === "answer"}
           disabled={gridLocked || (!hasNotes && playback !== "answer")}
           onClick={() => void play("answer")}
         >
@@ -538,6 +572,21 @@ export default function RoundBoard({
           )}
           {playback === "answer" ? "Pause" : "Play"}
         </button>
+        {progress.submitted && (
+          <button
+            className={`secondary-button ${playback === "original" ? "button-playing" : ""}`}
+            data-playback="original"
+            aria-pressed={playback === "original"}
+            onClick={() => void play("original")}
+          >
+            {playback === "original" ? (
+              <Pause size={14} fill="currentColor" />
+            ) : (
+              <Play size={15} fill="currentColor" />
+            )}
+            {playback === "original" ? "Pause original" : "Play original"}
+          </button>
+        )}
         {!progress.submitted && (
           <p className="sequence-phase-note" role="status">
             {gridLocked ? (

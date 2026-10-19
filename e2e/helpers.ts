@@ -12,6 +12,7 @@ import {
 } from "../src/lib/types";
 
 export interface PlaybackProbe {
+  pattern: RhythmPattern;
   maxLoops?: number;
   countIn?: boolean;
   countIns: (number | null)[];
@@ -153,6 +154,7 @@ export async function installAudioProbe(page: Page) {
       options: Record<string, any> = {},
     ) {
       const play: PlaybackProbe = {
+        pattern: structuredClone(pattern as RhythmPattern),
         maxLoops: options.maxLoops,
         countIn: options.countIn,
         countIns: [],

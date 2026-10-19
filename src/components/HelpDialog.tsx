@@ -66,8 +66,10 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
                 the pause button and Space shortcut unlock after the first
                 complete loop. Pausing then ends listening permanently, even if
                 all six loops haven’t finished. The grid unlocks when listening
-                ends. Refreshing, switching modes, or submitting won’t restore
-                the original beat.
+                ends. Refreshing or switching modes won’t restore the preview.
+                After submission, use Play original beside Play to compare the
+                solution with your beat. Both controls start immediately and
+                pause on a second press; only one beat plays at a time.
               </p>
             </div>
           </li>
