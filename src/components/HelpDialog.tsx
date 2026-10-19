@@ -63,9 +63,11 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
               <p>
                 Press the cyan listening button for a three-tick “3, 2, 1”
                 count-in and up to six loops. You have one listening session:
-                pausing ends it permanently, even if all six loops haven’t
-                finished. The grid unlocks when listening ends. Refreshing,
-                switching modes, or submitting won’t restore the original beat.
+                the pause button and Space shortcut unlock after the first
+                complete loop. Pausing then ends listening permanently, even if
+                all six loops haven’t finished. The grid unlocks when listening
+                ends. Refreshing, switching modes, or submitting won’t restore
+                the original beat.
               </p>
             </div>
           </li>

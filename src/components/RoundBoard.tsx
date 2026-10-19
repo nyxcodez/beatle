@@ -25,6 +25,7 @@ import { getScoreDetails } from "../lib/scoring";
 import {
   createEmptyPattern,
   LISTENING_LOOPS,
+  MIN_LISTENING_LOOPS,
   STEP_COUNT,
   TRACKS,
   type Puzzle,
@@ -116,6 +117,15 @@ export default function RoundBoard({
     setLoading(false);
   }
 
+  function pausePlayback() {
+    if (
+      playbackRef.current === "target" &&
+      progressRef.current.completedLoops < MIN_LISTENING_LOOPS
+    )
+      return;
+    stopPlayback();
+  }
+
   useEffect(() => {
     const engine = new BeatleAudioEngine();
     engineRef.current = engine;
@@ -173,7 +183,7 @@ export default function RoundBoard({
 
   async function play(mode: Exclude<Playback, null>) {
     if (playbackRef.current === mode) {
-      stopPlayback();
+      pausePlayback();
       return;
     }
     if (
@@ -322,6 +332,8 @@ export default function RoundBoard({
   }
 
   const referenceEnded = progress.referenceEnded;
+  const pauseLocked =
+    playback === "target" && progress.completedLoops < MIN_LISTENING_LOOPS;
   const gridLocked = !referenceEnded;
   const details = progress.submitted
     ? getScoreDetails(progress.pattern, puzzle.pattern)
@@ -335,7 +347,7 @@ export default function RoundBoard({
   shortcutRef.current = () => {
     if (suspendPlayback) return;
     if (playbackRef.current) {
-      stopPlayback();
+      pausePlayback();
     } else if (
       progressRef.current.referenceEnded &&
       TRACKS.some(({ id }) => progressRef.current.pattern[id].some(Boolean))
@@ -379,11 +391,13 @@ export default function RoundBoard({
         <button
           className="listen-button"
           onClick={() => void play("target")}
-          disabled={referenceEnded}
+          disabled={referenceEnded || pauseLocked}
           title={
             referenceEnded
               ? "The original beat cannot be replayed."
-              : "One listening session. Stopping ends it permanently."
+              : pauseLocked
+                ? "Listen to one complete loop before pausing."
+                : "One listening session. Stopping ends it permanently."
           }
           aria-label={
             playback === "target" ? "Stop listening" : "Listen to the beat"
@@ -411,8 +425,8 @@ export default function RoundBoard({
             {referenceEnded
               ? "Listening is finished. The original beat cannot be replayed."
               : playback === "target" && countIn === null && !loading
-                ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. Stop when you’re ready—there’s no replay.`
-                : "One chance to listen. Up to six loops; stopping ends playback."}
+                ? `Loop ${Math.min(LISTENING_LOOPS, progress.completedLoops + 1)} of ${LISTENING_LOOPS}. ${pauseLocked ? "Pausing unlocks after this loop finishes." : "Stop when you’re ready—there’s no replay."}`
+                : "One chance to listen. Hear at least one full loop before pausing."}
           </p>
         </div>
         <div

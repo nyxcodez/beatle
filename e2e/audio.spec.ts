@@ -11,70 +11,108 @@ async function completedLoops(page: Page, key: string): Promise<number> {
   );
 }
 
-test("stopping an early partial reference permanently disables it, unlocks editing, and survives reload and submission", async ({
-  page,
-}) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  const storageKey = await seedDailyRound(page, getUTCDateKey(), 0);
-  await page.goto("/");
-  await installAudioProbe(page);
-  const reference = page.locator(".listen-button");
-  const submit = page.getByRole("button", { name: "Submit beat", exact: true });
-  await expect(page.locator(".pad:disabled")).toHaveCount(48);
-  await page.keyboard.press("Space");
-  await expect(
-    page.getByRole("heading", { name: "Get ready… 3" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Find the groove.", exact: true }),
-  ).toBeVisible({ timeout: 6_000 });
-  await page.waitForTimeout(200);
-  expect(await completedLoops(page, storageKey)).toBe(0);
-  await page.keyboard.press("Space");
-  await expect(reference).toBeDisabled();
-  await expect(page.locator(".pad-playing")).toHaveCount(0);
-  await expect(page.locator(".pad:disabled")).toHaveCount(0);
-  await expect(submit).toBeEnabled();
-  expect((await audioProbe(page)).plays[0].loopCallbacks).toEqual([]);
-  expect(
-    (await audioProbe(page)).plays[0].countIns.filter((beat) => beat !== null),
-  ).toEqual([3, 2, 1]);
-  expect(
-    await page.evaluate(
-      (key) => JSON.parse(localStorage.getItem(key)!).rounds[0].referenceEnded,
-      storageKey,
-    ),
-  ).toBe(true);
-  // With an empty answer, Space must not restart the ended reference.
-  await page.keyboard.press("Space");
-  await reference.dispatchEvent("click");
-  expect((await audioProbe(page)).plays).toHaveLength(1);
-  await page.reload();
-  await installAudioProbe(page);
-  await expect(reference).toBeDisabled();
-  await expect(submit).toBeEnabled();
-  await expect(
-    page.getByRole("progressbar", { name: "Loops completed" }),
-  ).toHaveAttribute("aria-valuenow", "0");
-  await page.keyboard.press("Space");
-  expect((await audioProbe(page)).plays).toHaveLength(0);
-  const kick = page.getByRole("button", { name: "Kick, step 1", exact: true });
-  await kick.click();
-  await page.keyboard.press("Space");
-  await expect(
-    page.getByRole("button", { name: "Pause", exact: true }),
-  ).toBeVisible();
-  expect((await audioProbe(page)).plays[0].countIn).toBe(false);
-  await page.keyboard.press("Space");
-  await submit.click();
-  await expect(page.locator(".round-result")).toBeVisible();
-  await expect(reference).toBeDisabled();
-  await reference.dispatchEvent("click");
-  expect((await audioProbe(page)).plays).toHaveLength(1);
-  expect(await completedLoops(page, storageKey)).toBe(0);
-  expect(errors).toEqual([]);
-});
+for (const pauseControl of ["Space", "button"] as const) {
+  test(`the reference cannot pause before one full loop; ${pauseControl} then ends it permanently`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    const storageKey = await seedDailyRound(page, getUTCDateKey(), 0);
+    await page.goto("/");
+    await installAudioProbe(page);
+    const reference = page.locator(".listen-button");
+    const submit = page.getByRole("button", {
+      name: "Submit beat",
+      exact: true,
+    });
+    await expect(page.locator(".pad:disabled")).toHaveCount(48);
+    await page.keyboard.press("Space");
+    await expect(
+      page.getByRole("heading", { name: "Get ready… 3" }),
+    ).toBeVisible();
+    await expect(reference).toBeDisabled();
+    await page.keyboard.press("Space");
+    await reference.dispatchEvent("click");
+    await expect(
+      page.getByRole("heading", { name: /Get ready/ }),
+    ).toBeVisible();
+    await expect(submit).toBeDisabled();
+    await expect(
+      page.getByRole("heading", { name: "Find the groove.", exact: true }),
+    ).toBeVisible({ timeout: 6_000 });
+    await page.waitForTimeout(200);
+    expect(await completedLoops(page, storageKey)).toBe(0);
+    await page.keyboard.press("Space");
+    await reference.dispatchEvent("click");
+    await expect(reference).toBeDisabled();
+    await expect(page.locator(".pad-playing")).toHaveCount(3);
+    await expect(page.locator(".pad:disabled")).toHaveCount(48);
+    await expect(submit).toBeDisabled();
+    expect((await audioProbe(page)).plays).toHaveLength(1);
+    expect((await audioProbe(page)).plays[0].loopCallbacks).toEqual([]);
+    expect(
+      await page.evaluate(
+        (key) =>
+          JSON.parse(localStorage.getItem(key)!).rounds[0].referenceEnded,
+        storageKey,
+      ),
+    ).toBe(false);
+    await expect(
+      page.getByRole("progressbar", { name: "Loops completed" }),
+    ).toHaveAttribute("aria-valuenow", "1", { timeout: 5000 });
+    await expect(reference).toBeEnabled();
+    if (pauseControl === "Space") await page.keyboard.press("Space");
+    else await reference.click();
+    await expect(reference).toBeDisabled();
+    await expect(page.locator(".pad-playing")).toHaveCount(0);
+    await expect(page.locator(".pad:disabled")).toHaveCount(0);
+    await expect(submit).toBeEnabled();
+    expect((await audioProbe(page)).plays[0].loopCallbacks).toEqual([1]);
+    expect(
+      (await audioProbe(page)).plays[0].countIns.filter(
+        (beat) => beat !== null,
+      ),
+    ).toEqual([3, 2, 1]);
+    expect(
+      await page.evaluate(
+        (key) =>
+          JSON.parse(localStorage.getItem(key)!).rounds[0].referenceEnded,
+        storageKey,
+      ),
+    ).toBe(true);
+    // With an empty answer, Space must not restart the ended reference.
+    await page.keyboard.press("Space");
+    await reference.dispatchEvent("click");
+    expect((await audioProbe(page)).plays).toHaveLength(1);
+    await page.reload();
+    await installAudioProbe(page);
+    await expect(reference).toBeDisabled();
+    await expect(submit).toBeEnabled();
+    await expect(
+      page.getByRole("progressbar", { name: "Loops completed" }),
+    ).toHaveAttribute("aria-valuenow", "1");
+    await page.keyboard.press("Space");
+    expect((await audioProbe(page)).plays).toHaveLength(0);
+    const kick = page.getByRole("button", {
+      name: "Kick, step 1",
+      exact: true,
+    });
+    await kick.click();
+    await page.keyboard.press("Space");
+    await expect(
+      page.getByRole("button", { name: "Pause", exact: true }),
+    ).toBeVisible();
+    expect((await audioProbe(page)).plays[0].countIn).toBe(false);
+    await page.keyboard.press("Space");
+    await submit.click();
+    await expect(page.locator(".round-result")).toBeVisible();
+    await expect(reference).toBeDisabled();
+    await reference.dispatchEvent("click");
+    expect((await audioProbe(page)).plays).toHaveLength(1);
+    expect(await completedLoops(page, storageKey)).toBe(1);
+    expect(errors).toEqual([]);
+  });
+}
 
 test("added pads sound and live editing and clearing keep Play running without resetting; mistakes include misses and extras", async ({
   page,
