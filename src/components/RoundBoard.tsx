@@ -370,7 +370,13 @@ export default function RoundBoard({
           </span>
           <div>
             <p className="eyebrow">
-              {progress.submitted ? "ROUND COMPLETE" : "THE CHALLENGE"}
+              {progress.submitted ? "ROUND COMPLETE" : "THE CHALLENGE"} ·{" "}
+              <span
+                className="difficulty-label"
+                data-difficulty={puzzle.difficulty}
+              >
+                {puzzle.difficulty.toUpperCase()}
+              </span>
             </p>
             <h2>
               {progress.submitted ? puzzle.title : "Listen. Feel. Recreate."}

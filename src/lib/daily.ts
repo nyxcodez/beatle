@@ -3,6 +3,7 @@ import { scorePattern } from "./scoring";
 import {
   clonePattern,
   createEmptyPattern,
+  DIFFICULTIES,
   LISTENING_LOOPS,
   TRACKS,
   type Puzzle,
@@ -10,9 +11,10 @@ import {
 } from "./types";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
-const FIRST_CHALLENGE_UTC = Date.UTC(2026, 0, 1);
-// Keep the loop-based schema so existing saved attempts remain available.
-const STORAGE_PREFIX = "beatle:daily:v2:";
+// UTC arithmetic here only assigns calendar labels a stable ordinal, independent of DST.
+const FIRST_CHALLENGE_DAY = Date.UTC(2026, 0, 1);
+// The new selection order needs separate answers; retain older UTC records untouched.
+const STORAGE_PREFIX = "beatle:daily:local:v3:";
 const MAX_RECORD_LENGTH = 16_384;
 
 export interface DailyChallenge {
@@ -36,22 +38,18 @@ type StorageWriter = Pick<Storage, "setItem">;
 
 function dateTimestamp(dateKey: string): number {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey))
-    throw new Error("A UTC date key must use YYYY-MM-DD.");
+    throw new Error("A calendar date key must use YYYY-MM-DD.");
   const timestamp = Date.parse(`${dateKey}T00:00:00.000Z`);
   if (
     !Number.isFinite(timestamp) ||
     new Date(timestamp).toISOString().slice(0, 10) !== dateKey
   ) {
-    throw new Error("Invalid UTC date key.");
+    throw new Error("Invalid calendar date key.");
   }
   return timestamp;
 }
 
-export function getUTCDateKey(date: Date = new Date()): string {
-  const dateKey = date.toISOString().slice(0, 10);
-  dateTimestamp(dateKey);
-  return dateKey;
-}
+export { getLocalDateKey } from "./calendar";
 
 /** Stable 32-bit hashing and shuffling keep selection independent of locale and runtime. */
 function seededRandom(dateKey: string): () => number {
@@ -75,18 +73,20 @@ function copyPuzzle(puzzle: Puzzle): Puzzle {
 export function getDailyChallenge(dateKey: string): DailyChallenge {
   const timestamp = dateTimestamp(dateKey);
   const random = seededRandom(dateKey);
-  const candidates = [...PUZZLES];
-  for (let index = candidates.length - 1; index > 0; index -= 1) {
-    const other = Math.floor(random() * (index + 1));
-    [candidates[index], candidates[other]] = [
-      candidates[other],
-      candidates[index],
-    ];
-  }
+  // Curated tiers reflect rhythmic regularity, syncopation, fills, and track interplay.
+  // Select one puzzle from each tier instead of shuffling difficulties together.
+  const puzzles = DIFFICULTIES.map((difficulty) => {
+    const candidates = PUZZLES.filter(
+      (puzzle) => puzzle.difficulty === difficulty,
+    );
+    if (!candidates.length)
+      throw new Error(`No ${difficulty} puzzles are available.`);
+    return copyPuzzle(candidates[Math.floor(random() * candidates.length)]);
+  }) as [Puzzle, Puzzle, Puzzle];
   return {
     dateKey,
-    number: Math.floor((timestamp - FIRST_CHALLENGE_UTC) / DAY_MS) + 1,
-    puzzles: candidates.slice(0, 3).map(copyPuzzle) as [Puzzle, Puzzle, Puzzle],
+    number: Math.floor((timestamp - FIRST_CHALLENGE_DAY) / DAY_MS) + 1,
+    puzzles,
   };
 }
 
@@ -122,7 +122,7 @@ function validateProgress(
     throw new Error("Missing daily date.");
   dateTimestamp(progress.dateKey);
   if (expectedDateKey !== undefined && progress.dateKey !== expectedDateKey) {
-    throw new Error("Saved progress belongs to a different UTC day.");
+    throw new Error("Saved progress belongs to a different local day.");
   }
   if (!Array.isArray(progress.rounds) || progress.rounds.length !== 3) {
     throw new Error("Daily progress must contain exactly three rounds.");
@@ -193,7 +193,7 @@ function browserStorage(): Storage | null {
   }
 }
 
-/** Earlier v2 records did not track the irreversible end of reference playback. */
+/** Normalize an older record shape without reopening a played reference. */
 function migrateReferenceState(value: unknown): unknown {
   if (typeof value !== "object" || value === null) return value;
   const progress = value as Record<string, unknown>;

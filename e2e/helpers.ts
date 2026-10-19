@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import {
   createDailyProgress,
   getDailyStorageKey,
-  getUTCDateKey,
+  getLocalDateKey,
 } from "../src/lib/daily";
 import {
   MIN_LISTENING_LOOPS,
@@ -61,7 +61,7 @@ async function loadedAudioEngineUrl(page: Page): Promise<string> {
 
 export async function seedDailyRound(
   page: Page,
-  dateKey = getUTCDateKey(),
+  dateKey = getLocalDateKey(),
   completedLoops = MIN_LISTENING_LOOPS,
 ) {
   watchAudioEngineRequests(page);

@@ -6,7 +6,7 @@ import {
   getDailyStorageKey,
   getPracticePuzzle,
   getTotalScore,
-  getUTCDateKey,
+  getLocalDateKey,
   loadDailyProgress,
   saveDailyProgress,
 } from "./daily";
@@ -27,16 +27,12 @@ function memoryStorage() {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("UTC daily challenge selection", () => {
-  it("uses the UTC day across local offsets and the midnight boundary", () => {
-    expect(getUTCDateKey(new Date("2026-10-18T01:00:00+03:00"))).toBe(
-      "2026-10-17",
+describe("local daily challenge selection", () => {
+  it("uses the local calendar date at the midnight boundary", () => {
+    expect(getLocalDateKey(new Date(2026, 9, 18, 23, 59, 59, 999))).toBe(
+      DATE_KEY,
     );
-    expect(getUTCDateKey(new Date("2026-10-17T23:00:00-07:00"))).toBe(DATE_KEY);
-    expect(getUTCDateKey(new Date("2026-10-18T23:59:59.999Z"))).toBe(DATE_KEY);
-    expect(getUTCDateKey(new Date("2026-10-19T00:00:00.000Z"))).toBe(
-      "2026-10-19",
-    );
+    expect(getLocalDateKey(new Date(2026, 9, 19, 0, 0, 0))).toBe("2026-10-19");
   });
 
   it("selects three distinct curated puzzles deterministically without ambient randomness", () => {
@@ -44,6 +40,11 @@ describe("UTC daily challenge selection", () => {
       throw new Error("No ambient randomness");
     });
     const challenge = getDailyChallenge(DATE_KEY);
+    expect(challenge.puzzles.map(({ difficulty }) => difficulty)).toEqual([
+      "easy",
+      "medium",
+      "hard",
+    ]);
     expect(getDailyChallenge(DATE_KEY)).toEqual(challenge);
     expect(new Set(challenge.puzzles.map(({ id }) => id)).size).toBe(3);
     expect(
@@ -56,6 +57,21 @@ describe("UTC daily challenge selection", () => {
     );
     expect(getDailyChallenge("2026-10-19").number).toBe(challenge.number + 1);
     expect(getDailyChallenge("2026-01-01").number).toBe(1);
+  });
+
+  it("always increases difficulty across every day of the year", () => {
+    for (let day = 0; day < 365; day += 1) {
+      const key = new Date(Date.UTC(2026, 0, 1 + day))
+        .toISOString()
+        .slice(0, 10);
+      const puzzles = getDailyChallenge(key).puzzles;
+      expect(puzzles.map(({ difficulty }) => difficulty)).toEqual([
+        "easy",
+        "medium",
+        "hard",
+      ]);
+      expect(new Set(puzzles.map(({ id }) => id)).size).toBe(3);
+    }
   });
 
   it("does not allow edits to a returned challenge to mutate future solutions", () => {
@@ -129,7 +145,7 @@ describe("daily progress persistence", () => {
     },
   );
 
-  it("restores partially completed listening in the existing v2 storage record", () => {
+  it("restores partially completed listening in the local storage record", () => {
     const storage = memoryStorage();
     const progress = createDailyProgress(DATE_KEY);
     progress.rounds[0].completedLoops = 3;
@@ -137,7 +153,7 @@ describe("daily progress persistence", () => {
     expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(progress);
   });
 
-  it("migrates older v2 attempts without losing answers and closes played reference loops", () => {
+  it("normalizes records missing the reference flag without losing answers", () => {
     const expected = createDailyProgress(DATE_KEY);
     expected.rounds[0].completedLoops = LISTENING_LOOPS;
     expected.rounds[0].referenceEnded = true;
@@ -163,7 +179,7 @@ describe("daily progress persistence", () => {
     expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(expected);
   });
 
-  it("keeps old timer-based attempts separate from the six-loop rules", () => {
+  it("keeps old timer and UTC attempts separate from reordered local challenges", () => {
     const storage = memoryStorage();
     const legacyKey = `beatle:daily:v1:${DATE_KEY}`;
     const legacyRecord = JSON.stringify({
@@ -171,14 +187,20 @@ describe("daily progress persistence", () => {
       rounds: [{ listeningSecondsUsed: 30, submitted: true }],
     });
     storage.setItem(legacyKey, legacyRecord);
-    expect(getDailyStorageKey(DATE_KEY)).toBe(`beatle:daily:v2:${DATE_KEY}`);
+    const utcKey = `beatle:daily:v2:${DATE_KEY}`;
+    const utcRecord = JSON.stringify(createDailyProgress(DATE_KEY));
+    storage.setItem(utcKey, utcRecord);
+    expect(getDailyStorageKey(DATE_KEY)).toBe(
+      `beatle:daily:local:v3:${DATE_KEY}`,
+    );
     expect(loadDailyProgress(DATE_KEY, storage).progress).toEqual(
       createDailyProgress(DATE_KEY),
     );
     expect(storage.getItem(legacyKey)).toBe(legacyRecord);
+    expect(storage.getItem(utcKey)).toBe(utcRecord);
   });
 
-  it("keeps UTC days separate and refuses stale content in the current key", () => {
+  it("keeps local days separate and refuses stale content in the current key", () => {
     const storage = memoryStorage();
     const yesterday = createDailyProgress("2026-10-17");
     yesterday.rounds[0].submitted = true;

@@ -29,6 +29,10 @@ test("three sequential daily rounds score 300, persist after one reference bar, 
   ).toBeDisabled();
 
   for (let index = 0; index < 3; index += 1) {
+    await expect(page.locator(".difficulty-label")).toHaveAttribute(
+      "data-difficulty",
+      ["easy", "medium", "hard"][index],
+    );
     await expect(page.locator(".round-board")).toHaveAttribute(
       "aria-label",
       `Round ${index + 1}`,
@@ -131,7 +135,7 @@ test("unlocked notes and completed listening loops survive reload with unlimited
   expect(record.rounds[0].completedLoops).toBe(MIN_LISTENING_LOOPS);
   expect(record.rounds[0].submitted).toBe(false);
   expect(record.rounds[0].referenceEnded).toBe(true);
-  // A v2 save from before the flag existed must preserve its edited answer.
+  // A stored record missing the reference flag must preserve its edited answer.
   await page.evaluate((key) => {
     const legacy = JSON.parse(localStorage.getItem(key)!);
     delete legacy.rounds[0].referenceEnded;
@@ -227,7 +231,7 @@ test("practice continues beyond three rounds, locks every new grid, and keeps da
   expect(await savedDaily(page, DATE_KEY)).toBe(dailyRecord);
 });
 
-test("UTC midnight starts a fresh locked day and preserves the prior day record", async ({
+test("local midnight starts a fresh locked day and preserves the prior day record", async ({
   page,
 }) => {
   await page.clock.install({ time: new Date(`${DATE_KEY}T23:59:50.000Z`) });

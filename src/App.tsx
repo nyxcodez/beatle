@@ -60,8 +60,7 @@ export default function App() {
   const prettyDate = new Intl.DateTimeFormat("en", {
     month: "short",
     day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${daily.dateKey}T00:00:00Z`));
+  }).format(new Date(`${daily.dateKey}T00:00:00`));
 
   useEffect(() => {
     if (!newDayMessage) return;
@@ -181,7 +180,7 @@ export default function App() {
               <strong>And your inner drummer.</strong>
               <span className="challenge-date">
                 {mode === "daily"
-                  ? `DAILY #${challenge.number} · ${prettyDate.toUpperCase()} · UTC`
+                  ? `DAILY #${challenge.number} · ${prettyDate.toUpperCase()} · LOCAL`
                   : "PRACTICE MAKES POCKET."}
               </span>
             </p>
@@ -191,7 +190,7 @@ export default function App() {
 
         {newDayMessage && (
           <p className="notice-banner" role="status">
-            A new day, a new groove. Your next UTC daily challenge is ready.
+            A new day, a new groove. Your next daily challenge is ready.
           </p>
         )}
         {!storageAvailable && (
@@ -213,6 +212,7 @@ export default function App() {
                   aria-current={
                     index === roundIndex && !showSummary ? "step" : undefined
                   }
+                  title={`Round ${index + 1}: ${challenge.puzzles[index].difficulty}`}
                   onClick={() => {
                     setSelectedRound(index);
                     setSummaryVisible(false);

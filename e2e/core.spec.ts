@@ -10,7 +10,11 @@ test("a complete round: hear exactly six full loops, unlock the grid, play immed
   await page.goto("/");
   await installAudioProbe(page);
   const dateKey = await page.evaluate(() =>
-    new Date().toISOString().slice(0, 10),
+    [
+      new Date().getFullYear(),
+      String(new Date().getMonth() + 1).padStart(2, "0"),
+      String(new Date().getDate()).padStart(2, "0"),
+    ].join("-"),
   );
   const puzzle = getDailyChallenge(dateKey).puzzles[0];
   const loops = page.getByRole("progressbar", { name: "Loops completed" });

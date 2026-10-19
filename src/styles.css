@@ -338,6 +338,9 @@ h1 > span {
   letter-spacing: 1.7px;
   margin-bottom: 3px;
 }
+.difficulty-label {
+  color: var(--cyan);
+}
 .board-heading h2 {
   font-size: 17px;
   font-family: "Manrope Variable", sans-serif;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getUTCDateKey,
+  getLocalDateKey,
   loadDailyProgress,
   saveDailyProgress,
   type DailyProgress,
@@ -9,7 +9,7 @@ import type { RoundProgress } from "./types";
 
 /** Keep date rollover and best-effort browser persistence out of the game UI. */
 export function useDailyGame(onNewDay: () => void) {
-  const [loaded] = useState(() => loadDailyProgress(getUTCDateKey()));
+  const [loaded] = useState(() => loadDailyProgress(getLocalDateKey()));
   const [daily, setDaily] = useState(loaded.progress);
   const [storageAvailable, setStorageAvailable] = useState(
     loaded.storageAvailable,
@@ -39,7 +39,7 @@ export function useDailyGame(onNewDay: () => void) {
 
   useEffect(() => {
     function checkDate() {
-      const dateKey = getUTCDateKey();
+      const dateKey = getLocalDateKey();
       if (dateKey === dailyRef.current.dateKey) return;
       const next = loadDailyProgress(dateKey);
       dailyRef.current = next.progress;

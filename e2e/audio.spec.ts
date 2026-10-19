@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { getDailyChallenge, getUTCDateKey } from "../src/lib/daily";
+import { getDailyChallenge, getLocalDateKey } from "../src/lib/daily";
 import { LISTENING_LOOPS, TRACKS } from "../src/lib/types";
 import { audioProbe, installAudioProbe, seedDailyRound } from "./helpers";
 
@@ -17,7 +17,7 @@ for (const pauseControl of ["Space", "button"] as const) {
   }) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    const storageKey = await seedDailyRound(page, getUTCDateKey(), 0);
+    const storageKey = await seedDailyRound(page, getLocalDateKey(), 0);
     await page.goto("/");
     await installAudioProbe(page);
     const reference = page.locator(".listen-button");
@@ -121,7 +121,7 @@ test("added pads sound and live editing and clearing keep Play running without r
   page.on("pageerror", (error) => errors.push(error.message));
   const storageKey = await seedDailyRound(
     page,
-    getUTCDateKey(),
+    getLocalDateKey(),
     LISTENING_LOOPS,
   );
   await page.goto("/");
@@ -189,7 +189,11 @@ test("added pads sound and live editing and clearing keep Play running without r
   await page.getByRole("button", { name: "Pause", exact: true }).click();
 
   const dateKey = await page.evaluate(() =>
-    new Date().toISOString().slice(0, 10),
+    [
+      new Date().getFullYear(),
+      String(new Date().getMonth() + 1).padStart(2, "0"),
+      String(new Date().getDate()).padStart(2, "0"),
+    ].join("-"),
   );
   const puzzle = getDailyChallenge(dateKey).puzzles[0];
   const cells = TRACKS.flatMap((track) =>
@@ -238,7 +242,7 @@ test("added pads sound and live editing and clearing keep Play running without r
 test("help, hidden tabs, and mode switches permanently end a started reference", async ({
   page,
 }) => {
-  const storageKey = await seedDailyRound(page, getUTCDateKey(), 0);
+  const storageKey = await seedDailyRound(page, getLocalDateKey(), 0);
   await page.goto("/");
   for (const reason of ["help", "hidden", "mode"] as const) {
     await test.step(reason, async () => {

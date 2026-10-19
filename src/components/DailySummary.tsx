@@ -3,6 +3,7 @@ import { ArrowRight, Check, Copy, PartyPopper, RotateCcw } from "lucide-react";
 import { getTotalScore, type DailyProgress } from "../lib/daily";
 import { scorePattern } from "../lib/scoring";
 import type { Puzzle } from "../lib/types";
+import { getLocalResetCountdown } from "../lib/calendar";
 
 interface Props {
   challengeNumber: number;
@@ -12,23 +13,6 @@ interface Props {
   onReview: () => void;
 }
 
-function untilNextUTC(): string {
-  const now = new Date();
-  const midnight = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + 1,
-  );
-  const seconds = Math.max(0, Math.floor((midnight - now.getTime()) / 1000));
-  return [
-    Math.floor(seconds / 3600),
-    Math.floor(seconds / 60) % 60,
-    seconds % 60,
-  ]
-    .map((n) => String(n).padStart(2, "0"))
-    .join(":");
-}
-
 export default function DailySummary({
   challengeNumber,
   progress,
@@ -36,7 +20,7 @@ export default function DailySummary({
   onPractice,
   onReview,
 }: Props) {
-  const [countdown, setCountdown] = useState(untilNextUTC);
+  const [countdown, setCountdown] = useState(getLocalResetCountdown);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
@@ -47,7 +31,10 @@ export default function DailySummary({
   const shareText = `Beatle #${challengeNumber} · ${progress.dateKey}\n${scores.map((score) => `${score === 100 ? "🟩" : score >= 80 ? "🟨" : "🟧"} ${score}%`).join("  ")}\n${total}/300 · Find your rhythm.`;
 
   useEffect(() => {
-    const timer = window.setInterval(() => setCountdown(untilNextUTC()), 1000);
+    const timer = window.setInterval(
+      () => setCountdown(getLocalResetCountdown()),
+      1000,
+    );
     return () => window.clearInterval(timer);
   }, []);
 
@@ -84,7 +71,10 @@ export default function DailySummary({
       <div className="summary-rounds">
         {scores.map((score, index) => (
           <div key={puzzles[index].id}>
-            <span>ROUND {String(index + 1).padStart(2, "0")}</span>
+            <span>
+              ROUND {String(index + 1).padStart(2, "0")} ·{" "}
+              {puzzles[index].difficulty.toUpperCase()}
+            </span>
             <strong>
               {score}
               <small>%</small>
@@ -117,7 +107,7 @@ export default function DailySummary({
       <div className="next-beat">
         <p>YOUR NEXT DAILY BEAT IN</p>
         <strong>{countdown}</strong>
-        <span>Resets at 00:00 UTC</span>
+        <span>Resets at 00:00 local time</span>
       </div>
       <button className="text-button review-button" onClick={onReview}>
         <RotateCcw size={13} />

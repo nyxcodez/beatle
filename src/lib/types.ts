@@ -19,10 +19,14 @@ export const TRACKS: readonly Track[] = [
 
 export type RhythmPattern = Record<TrackId, boolean[]>;
 
+export const DIFFICULTIES = ["easy", "medium", "hard"] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+
 export interface Puzzle {
   id: string;
   title: string;
   bpm: number;
+  difficulty: Difficulty;
   pattern: RhythmPattern;
 }
 

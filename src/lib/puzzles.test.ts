@@ -5,7 +5,7 @@ import {
   validatePattern,
   validatePuzzle,
 } from "./puzzles";
-import { createEmptyPattern, STEP_COUNT } from "./types";
+import { createEmptyPattern, DIFFICULTIES, STEP_COUNT } from "./types";
 
 describe("curated puzzle validation", () => {
   it("ships distinct valid puzzles with 16 steps per track", () => {
@@ -59,4 +59,22 @@ describe("curated puzzle validation", () => {
     expect(first.snare[0]).toBe(false);
     expect(second.kick[0]).toBe(false);
   });
+
+  it("provides varied curated choices at every difficulty", () => {
+    for (const difficulty of DIFFICULTIES) {
+      expect(
+        PUZZLES.filter((puzzle) => puzzle.difficulty === difficulty),
+      ).toHaveLength(4);
+    }
+    expect(DEMO_PUZZLE.difficulty).toBe("easy");
+  });
+
+  it.each([undefined, null, "", "expert", 1])(
+    "rejects invalid difficulty %s",
+    (difficulty) => {
+      expect(() => validatePuzzle({ ...DEMO_PUZZLE, difficulty })).toThrow(
+        "difficulty",
+      );
+    },
+  );
 });

@@ -113,9 +113,10 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
         <div className="help-daily-note">
           <span className="nav-dot" />
           <p>
-            The daily beat resets at <strong>00:00 UTC</strong>. Progress is
-            saved in this browser. Want an encore? Practice has unlimited
-            rounds.
+            Daily rounds progress from <strong>Easy</strong> to{" "}
+            <strong>Medium</strong> to <strong>Hard</strong> and reset at{" "}
+            <strong>00:00 in your local time zone</strong>. Progress is saved in
+            this browser. Want an encore? Practice has unlimited rounds.
           </p>
         </div>
         <button className="primary-button dialog-cta" onClick={onClose}>
