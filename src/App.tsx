@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import DailySummary from "./components/DailySummary";
+import DailyStreak from "./components/DailyStreak";
 import HelpDialog from "./components/HelpDialog";
 import RoundBoard from "./components/RoundBoard";
 import {
@@ -42,7 +43,7 @@ export default function App() {
     setSummaryVisible(null);
     setNewDayMessage(true);
   }, []);
-  const { daily, updateRound, storageAvailable } = useDailyGame(newDay);
+  const { daily, updateRound, storageAvailable, streak } = useDailyGame(newDay);
   const [practice, setPractice] = useState(() => ({
     puzzle: getPracticePuzzle(),
     progress: freshRound(),
@@ -248,12 +249,17 @@ export default function App() {
           </p>
         </div>
 
+        {mode === "daily" && (
+          <DailyStreak days={streak} completedToday={activeRound === 3} />
+        )}
+
         <div id="game" className="game-container" ref={gameRef} tabIndex={-1}>
           {showSummary ? (
             <DailySummary
               challengeNumber={challenge.number}
               progress={daily}
               puzzles={challenge.puzzles}
+              streak={streak}
               onPractice={() => {
                 switchMode("practice");
                 scrollToGame();

@@ -118,7 +118,10 @@ export default function HelpDialog({ onClose }: { onClose: () => void }) {
             Daily rounds progress from <strong>Easy</strong> to{" "}
             <strong>Medium</strong> to <strong>Hard</strong> and reset at{" "}
             <strong>00:00 in your local time zone</strong>. Progress is saved in
-            this browser. Want an encore? Practice has unlimited rounds.
+            this browser. Finish all three daily rounds, at any score, to earn a
+            streak day. Complete consecutive days to grow your streak; missing a
+            full day resets it. Practice has unlimited rounds and does not
+            affect your streak.
           </p>
         </div>
         <button className="primary-button dialog-cta" onClick={onClose}>

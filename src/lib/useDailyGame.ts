@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getLocalDateKey,
   loadDailyProgress,
@@ -6,6 +6,7 @@ import {
   type DailyProgress,
 } from "./daily";
 import type { RoundProgress } from "./types";
+import { getDailyStreak } from "./streak";
 
 /** Keep date rollover and best-effort browser persistence out of the game UI. */
 export function useDailyGame(onNewDay: () => void) {
@@ -17,6 +18,11 @@ export function useDailyGame(onNewDay: () => void) {
   const dailyRef = useRef(daily);
   const onNewDayRef = useRef(onNewDay);
   onNewDayRef.current = onNewDay;
+  const completedToday = daily.rounds.every((round) => round.submitted);
+  const streak = useMemo(
+    () => getDailyStreak(daily.dateKey, completedToday),
+    [daily.dateKey, completedToday],
+  );
 
   const updateRound = useCallback(
     (index: number, round: RoundProgress, dateKey: string) => {
@@ -57,5 +63,5 @@ export function useDailyGame(onNewDay: () => void) {
     };
   }, []);
 
-  return { daily, updateRound, storageAvailable };
+  return { daily, updateRound, storageAvailable, streak };
 }

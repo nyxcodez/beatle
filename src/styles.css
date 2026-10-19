@@ -309,6 +309,60 @@ h1 > span {
   font-weight: 500;
   margin-left: 6px;
 }
+.daily-streak {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 18px;
+  padding: 13px 17px;
+  border: 1px solid #62dce82b;
+  border-radius: 12px;
+  background: #62dce806;
+}
+.streak-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--cyan);
+  border-radius: 10px;
+  background: #62dce80d;
+}
+.streak-total {
+  display: flex;
+  align-items: baseline;
+  gap: 13px;
+}
+.streak-label {
+  color: #a5b5c7;
+  font-size: 9px;
+  letter-spacing: 1.4px;
+}
+.streak-total strong {
+  color: #b6f0f5;
+  font-family: "Manrope Variable", sans-serif;
+  font-size: 18px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.streak-message {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  color: #a5b2c4;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.streak-message svg {
+  flex-shrink: 0;
+  color: var(--cyan);
+}
+.daily-streak[data-completed="true"] {
+  border-color: #62dce84d;
+  background: #62dce80a;
+}
 .round-board {
   border: 1px solid #344054;
   background: #172234;
@@ -1478,6 +1532,19 @@ h1 > span {
   color: #a5b2c4;
   margin-top: 9px;
 }
+.summary-streak {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+  color: #a5b2c4;
+  font-size: 12px;
+}
+.summary-streak svg,
+.summary-streak strong {
+  color: var(--cyan);
+}
 .summary-total {
   margin-top: 17px;
   margin-bottom: -2px;
@@ -1811,6 +1878,28 @@ h1 > span {
   .total-score strong span {
     font-size: 11px;
     margin-left: 4px;
+  }
+  .daily-streak {
+    grid-template-columns: auto 1fr;
+    gap: 9px 11px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+  .streak-total {
+    justify-content: space-between;
+    gap: 9px;
+  }
+  .streak-label {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .streak-total strong {
+    font-size: 17px;
+  }
+  .streak-message {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    font-size: 10px;
   }
   .round-board {
     padding: 20px 17px 0;

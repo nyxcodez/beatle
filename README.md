@@ -22,6 +22,7 @@ Open the Vite address printed in the terminal. Audio starts only after a click. 
 - **Space** plays or pauses the active loop, including when a pad has keyboard focus. When idle, it plays your sequence if it contains hits; it starts the reference only if that listening session has not ended. Text fields, editable content, and open dialogs keep their normal Space behavior. Holding Space does not repeatedly toggle playback.
 - Submit once per round to reveal the solution grid and unlock **Play original**, immediately beside **Play**. Compare your submitted beat and the solution as often as you like, without count-ins or overlapping loops; each button toggles to Pause while its beat plays. Space pauses/resumes the selected playback. Original playback is available even for an empty submitted grid, and it does not change saved progress or scores. The score is `round(100 * correctHits / (requiredHits + extraHits))`. An exact match earns 100; an empty or entirely wrong answer earns 0. With 12 required hits, finding all 12 plus two extra hits earns 86%; finding 8 of the 12 plus two extra hits earns 57%. No points are awarded for empty pads. An empty denominator scores 0. The maximum daily score is 300.
 - Daily answers, submissions, and completed loop counts are saved in this browser’s localStorage. The challenge resets at **00:00 in the player’s browser time zone**, including while the game is open. The date key, countdown, and rollover all follow the local calendar, including 23- and 25-hour daylight-saving days. People with the same local date get the same daily patterns. Practice offers unlimited rounds and never changes daily progress.
+- The **daily streak** counts consecutive local days on which all three daily rounds were submitted, at any score. Completing today adds one day exactly once; yesterday’s streak remains active while today is unfinished. Missing a full local day resets the streak. It survives reloads and includes already-saved local daily completions in this browser. Practice does not affect it.
 
 Progress is local to this browser and origin; clearing site data resets it. Without a backend, local clock changes or manually edited browser storage cannot be prevented. The daily pattern catalogue is versioned in source; keep existing puzzle IDs/patterns and the selection algorithm stable to preserve existing daily scores.
 
@@ -30,7 +31,7 @@ The reference-ended flag is saved with progress. Local challenges use the separa
 ## Verify
 
 ```sh
-npm test          # scoring, puzzle validation, difficulty selection, local calendar, persistence
+npm test          # scoring, puzzle validation, local calendar, persistence, daily streaks
 npm run build    # strict TypeScript check + production bundle
 npm run test:e2e # real Chromium game and audio workflows
 ```
@@ -56,9 +57,11 @@ Set `CHROMIUM_PATH` to use a different Chromium executable.
 | `src/lib/scoring.ts`              | Pure, validated required-hit scoring                                   |
 | `src/lib/daily.ts`                | Seeded Easy/Medium/Hard selection, practice, safe persistence          |
 | `src/lib/calendar.ts`             | Local date keys, next midnight, daylight-saving-safe countdown         |
+| `src/lib/streak.ts`               | Consecutive completed local days derived from saved daily progress     |
 | `src/lib/useDailyGame.ts`         | React persistence and live local-midnight rollover                     |
 | `src/components/RoundBoard.tsx`   | Locked listening phase, sequencer, playback, result comparison         |
 | `src/components/DailySummary.tsx` | Daily totals, copyable results, reset countdown                        |
+| `src/components/DailyStreak.tsx`  | Daily streak count and completion feedback                             |
 | `src/components/HelpDialog.tsx`   | Accessible instructions dialog                                         |
 | `src/App.tsx`                     | Daily/practice orchestration and round navigation                      |
 

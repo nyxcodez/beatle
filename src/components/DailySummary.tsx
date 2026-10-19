@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, Copy, PartyPopper, RotateCcw } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Copy,
+  Flame,
+  PartyPopper,
+  RotateCcw,
+} from "lucide-react";
 import { getTotalScore, type DailyProgress } from "../lib/daily";
 import { scorePattern } from "../lib/scoring";
 import type { Puzzle } from "../lib/types";
@@ -9,6 +16,7 @@ interface Props {
   challengeNumber: number;
   progress: DailyProgress;
   puzzles: readonly Puzzle[];
+  streak: number;
   onPractice: () => void;
   onReview: () => void;
 }
@@ -17,6 +25,7 @@ export default function DailySummary({
   challengeNumber,
   progress,
   puzzles,
+  streak,
   onPractice,
   onReview,
 }: Props) {
@@ -62,6 +71,13 @@ export default function DailySummary({
       </h2>
       <p className="summary-description">
         Today’s beat is in the books. Same time tomorrow?
+      </p>
+      <p className="summary-streak">
+        <Flame size={16} aria-hidden="true" />
+        <strong>
+          {streak} {streak === 1 ? "day" : "days"}
+        </strong>{" "}
+        daily streak
       </p>
       <div className="summary-total">
         <strong>{total}</strong>
